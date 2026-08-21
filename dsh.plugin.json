@@ -1,0 +1,7 @@
+{
+  "name": "dsh-local-history",
+  "description": "Session-scoped local history and AI change review",
+  "version": "0.1.0",
+  "entry": { "name": "dsh-local-history", "inject": ["settings", "typert"] },
+  "client": { "platform": "web" }
+}

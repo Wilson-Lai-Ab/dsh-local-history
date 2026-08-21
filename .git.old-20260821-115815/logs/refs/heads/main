@@ -1,0 +1,5 @@
+0000000000000000000000000000000000000000 e21bf9ea1d0ed78639fc3f428c53d0f0c8f89fe6 Wilson.Lai <Wilson.Lai@kuka.com> 1787146957 +0800	commit (initial): docs: add local-history plugin design spec
+e21bf9ea1d0ed78639fc3f428c53d0f0c8f89fe6 4ce83b776d697de963abb06b4069c21220576334 Wilson.Lai <Wilson.Lai@kuka.com> 1787147362 +0800	commit: docs: add local-history implementation plan
+4ce83b776d697de963abb06b4069c21220576334 d7c22562f601ba2f6d9c759af3f4122af07607e7 Wilson.Lai <Wilson.Lai@kuka.com> 1787147401 +0800	commit: chore: ignore worktrees, sdd workspace, and node_modules
+d7c22562f601ba2f6d9c759af3f4122af07607e7 763506b95c5e4004aafa6fea9e27d8bacfe0d41c Wilson.Lai <Wilson.Lai@kuka.com> 1787162151 +0800	merge feat/local-history: Fast-forward
+763506b95c5e4004aafa6fea9e27d8bacfe0d41c de8bbe4ee4b36269161b8a1b48d3eddd1490ef3b Wilson.Lai <Wilson.Lai@kuka.com> 1787163770 +0800	commit: fix: register localHistory as a typertRemote Cordis service

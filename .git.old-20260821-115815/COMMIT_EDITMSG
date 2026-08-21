@@ -1,0 +1,4 @@
+fix: register localHistory as a typertRemote Cordis service
+
+The review tab mounted, but syncSession/listReview failed because the
+gateway requires a visible typertRemote binding on the host service.

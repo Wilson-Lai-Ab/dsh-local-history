@@ -1,0 +1,7 @@
+.worktrees/
+.superpowers/
+node_modules/
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
