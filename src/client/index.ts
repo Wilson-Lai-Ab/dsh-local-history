@@ -67,6 +67,8 @@ export interface BetterSidebarService {
   }, scope?: SessionScope): void
   closeTab?(tabId: string, scope?: SessionScope): void
   updateTab?(tabId: string, patch: { title?: string; path?: string; meta?: unknown }): void
+  getSnapshot?(): { prefs?: { editorMinimap?: boolean } }
+  subscribeState?(listener: () => void): () => void
 }
 
 export interface ClientContext {
@@ -221,7 +223,7 @@ export function apply(ctx: ClientContext): void {
         if (remote === undefined || seed === undefined) {
           return createElement('div', { className: 'dsh_lh_error' }, t('loadFailed'))
         }
-        return createElement(SplitDiffView, { seed, remote, t })
+        return createElement(SplitDiffView, { seed, remote, t, prefs: sidebar })
       },
     }), 'dsh-local-history: compare tab')
     ctx.effect(() => sidebar.registerTab({
@@ -242,6 +244,7 @@ export function apply(ctx: ClientContext): void {
           cwd: props.scope.cwd,
           remote,
           t,
+          prefs: sidebar,
           afterHash: record.hash,
           visible: props.visible,
           onRecord: (next) => {

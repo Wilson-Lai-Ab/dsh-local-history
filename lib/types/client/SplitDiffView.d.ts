@@ -13,9 +13,11 @@ import { type ReactNode } from 'react';
 import type { LocalHistoryFace } from './remote.ts';
 import type { Translate } from './locales.ts';
 import { type CompareSeed } from './compare.ts';
+import { type MinimapPrefsSource } from './review-minimap.ts';
 export interface SplitDiffViewProps {
     seed: CompareSeed;
     remote: LocalHistoryFace;
     t?: Translate;
+    prefs?: MinimapPrefsSource;
 }
 export declare function SplitDiffView(props: SplitDiffViewProps): ReactNode;

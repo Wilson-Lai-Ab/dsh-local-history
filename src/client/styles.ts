@@ -287,9 +287,17 @@ export const cssText = `
   flex: none;
   gap: 6px;
 }
+.dsh_lh_fileWrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  --dsh-lh-minimap: min(120px, calc(100% / 6));
+}
 .dsh_lh_file {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
@@ -301,7 +309,7 @@ export const cssText = `
 .dsh_lh_inlineBar {
   position: absolute;
   top: 2px;
-  right: 8px;
+  right: calc(8px + var(--dsh-lh-minimap, 0px));
   z-index: 1;
   display: none;
   gap: 4px;
@@ -481,6 +489,34 @@ export const cssText = `
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 20px;
+}
+.dsh_lh_splitPanes {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+.dsh_lh_minimap {
+  position: relative;
+  flex: none;
+  width: min(120px, calc(100% / 6));
+  min-height: 0;
+  overflow: hidden;
+  cursor: pointer;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+.dsh_lh_minimapCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dsh_lh_minimapOverlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);
 }
 /* Each side is its own scrollable pane: own vertical + horizontal scrollbar,
    vertical scrolling synced from the component. */

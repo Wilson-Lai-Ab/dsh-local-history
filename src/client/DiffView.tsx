@@ -15,6 +15,7 @@ import { highlightRowsHtml } from './present.ts'
 import { notifyReviewChanged, subscribeReviewChanged } from './pending.ts'
 import { applyReviewRevert, popReviewRedo, popReviewUndo, pushReviewRevert } from './review-revert.ts'
 import { bindReviewKeys } from './review-keys.ts'
+import { ReviewMinimap, useEditorMinimap, type MinimapPrefsSource } from './review-minimap.ts'
 
 export interface DiffViewProps {
   record: HistoryRecord
@@ -29,6 +30,7 @@ export interface DiffViewProps {
   onFileDone?: () => void
   onRecord?: (record: HistoryRecord) => void
   visible?: boolean
+  prefs?: MinimapPrefsSource
 }
 
 interface DiffState {
@@ -50,6 +52,8 @@ export function DiffView(props: DiffViewProps): ReactNode {
   const [accepted, setAccepted] = useState<ReadonlySet<string>>(() => acceptedHunkKeys(record))
   const revertRef = useRef<(direction: 'undo' | 'redo') => boolean>(() => false)
   const liveRef = useRef(false)
+  const [fileEl, setFileEl] = useState<HTMLDivElement | null>(null)
+  const minimapOn = useEditorMinimap(props.prefs)
 
   useEffect(() => {
     liveRef.current = false
@@ -237,11 +241,17 @@ export function DiffView(props: DiffViewProps): ReactNode {
   const painted = state.binary ? { rows: [], hunks: [] as ReviewHunk[] } : paintFileDiff(state.before, state.after)
   const rows = settleAccepted(painted.rows, accepted)
   const highlighted = highlightRowsHtml(rows)
-  const hunkByKey = new Map(painted.hunks.filter((hunk) => !accepted.has(hunk.key)).map((hunk) => [hunk.key, hunk]))
+  const decided = (record.decision ?? 'pending') !== 'pending'
+  const hunkByKey = new Map(
+    decided
+      ? []
+      : painted.hunks.filter((hunk) => !accepted.has(hunk.key)).map((hunk) => [hunk.key, hunk]),
+  )
   const blocks = groupPaintRows(rows.map((row, index) => ({ ...row, html: highlighted[index] ?? '' })))
 
   return (
     <div className="dsh_lh_root dsh_lh_pane" data-lh-diff="">
+      {!decided && (
       <div className="dsh_lh_reviewBar">
         <span className="dsh_lh_reviewHint">{t('agentEdited')}</span>
         <div className="dsh_lh_reviewActions">
@@ -264,10 +274,12 @@ export function DiffView(props: DiffViewProps): ReactNode {
           </button>
         </div>
       </div>
+      )}
       {state.binary ? (
         <div className="dsh_lh_empty">{t('binaryFile')}</div>
       ) : (
-        <div className="dsh_lh_file">
+        <div className="dsh_lh_fileWrap">
+        <div className="dsh_lh_file" ref={setFileEl}>
           {blocks.map((block, blockIndex) => {
             const hunk = block.hunkKey === undefined ? undefined : hunkByKey.get(block.hunkKey)
             const range = hunk === undefined ? '' : hunkRange(hunk)
@@ -311,6 +323,8 @@ export function DiffView(props: DiffViewProps): ReactNode {
               </div>
             )
           })}
+        </div>
+        <ReviewMinimap rows={rows} scrollEl={fileEl} enabled={minimapOn} />
         </div>
       )}
     </div>

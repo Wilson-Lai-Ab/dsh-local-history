@@ -17,11 +17,13 @@ import type { Translate } from './locales.ts'
 import { lookup } from './locales.ts'
 import { highlightLineHtml, type ScanMode } from './present.ts'
 import { shortHash, type CompareSeed } from './compare.ts'
+import { ReviewMinimap, useEditorMinimap, type MinimapPrefsSource } from './review-minimap.ts'
 
 export interface SplitDiffViewProps {
   seed: CompareSeed
   remote: LocalHistoryFace
   t?: Translate
+  prefs?: MinimapPrefsSource
 }
 
 interface Loaded {
@@ -37,10 +39,16 @@ type HighlightedRow = SplitRow & { leftHtml: string; rightHtml: string }
 export function SplitDiffView(props: SplitDiffViewProps): ReactNode {
   const t = props.t ?? lookup
   const { seed, remote } = props
+  const minimapOn = useEditorMinimap(props.prefs)
   const [state, setState] = useState<Loaded | null>(null)
   const leftRef = useRef<HTMLDivElement | null>(null)
   const rightRef = useRef<HTMLDivElement | null>(null)
+  const [rightEl, setRightEl] = useState<HTMLDivElement | null>(null)
   const syncingRef = useRef(false)
+  const setRightPane = (node: HTMLDivElement | null): void => {
+    rightRef.current = node
+    setRightEl(node)
+  }
 
   const leftHash = seed.leftHash ?? ''
   const rightHash = seed.rightHash ?? ''
@@ -107,6 +115,7 @@ export function SplitDiffView(props: SplitDiffViewProps): ReactNode {
         <div className="dsh_lh_splitHead">{t('compareRight', { hash: shortHash(seed.rightHash) })}</div>
       </div>
       <div className="dsh_lh_splitBody">
+        <div className="dsh_lh_splitPanes">
         <div
           ref={leftRef}
           className="dsh_lh_splitPane"
@@ -123,7 +132,7 @@ export function SplitDiffView(props: SplitDiffViewProps): ReactNode {
           ))}
         </div>
         <div
-          ref={rightRef}
+          ref={setRightPane}
           className="dsh_lh_splitPane"
           onScroll={(event) => {
             const target = leftRef.current
@@ -137,6 +146,12 @@ export function SplitDiffView(props: SplitDiffViewProps): ReactNode {
             </div>
           ))}
         </div>
+        </div>
+        <ReviewMinimap
+          rows={highlighted.map((row) => ({ kind: row.right.kind, text: row.right.text }))}
+          scrollEl={rightEl}
+          enabled={minimapOn}
+        />
       </div>
     </div>
   )

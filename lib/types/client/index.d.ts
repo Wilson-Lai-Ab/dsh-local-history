@@ -58,6 +58,12 @@ export interface BetterSidebarService {
         path?: string;
         meta?: unknown;
     }): void;
+    getSnapshot?(): {
+        prefs?: {
+            editorMinimap?: boolean;
+        };
+    };
+    subscribeState?(listener: () => void): () => void;
 }
 export interface ClientContext {
     effect(fn: () => (() => void) | void, label?: string): void;

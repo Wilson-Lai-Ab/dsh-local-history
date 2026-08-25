@@ -24,11 +24,14 @@ async function persist(io: ActionIo, index: HistoryIndex): Promise<HistoryIndex>
   return next
 }
 
-function decideFileFromHunks(record: HistoryRecord, before: string, nextText: string): void {
-  const remaining = hunksFromTexts(before, nextText)
+function decideFileFromHunks(record: HistoryRecord, before: string, after: string): void {
+  const original = hunksFromTexts(before, after)
   const decided = record.hunks ?? {}
-  if (!remaining.every((hunk) => decided[hunk.key] !== undefined)) return
-  if (remaining.length === 0 && Object.keys(decided).length === 0) return
+  if (original.length === 0) {
+    if (Object.keys(decided).length === 0) return
+  } else if (!original.every((hunk) => decided[hunk.key] !== undefined)) {
+    return
+  }
   record.decision = Object.values(decided).some((value) => value === 'rejected') ? 'rejected' : 'accepted'
 }
 
@@ -76,9 +79,9 @@ export async function acceptHunk(io: ActionIo, recordId: string, hunkKey: string
     const index = await io.store.load()
     const record = requireRecord(index, recordId)
     record.hunks = { ...record.hunks, [hunkKey]: 'accepted' }
-    const current = await io.readFile(record.path)
     const before = await beforeTextOf(io, record)
-    decideFileFromHunks(record, before, current ?? '')
+    const after = record.hash === null ? '' : await io.store.readBlob(record.hash).catch(() => '')
+    decideFileFromHunks(record, before, after)
     return persist(io, index)
   })
 }
@@ -105,7 +108,8 @@ export async function rejectHunk(io: ActionIo, recordId: string, hunk: ReviewHun
     index.records.push(save)
     record.hunks = { ...record.hunks, [hunk.key]: 'rejected' }
     const before = await beforeTextOf(io, record)
-    decideFileFromHunks(record, before, nextText)
+    const after = record.hash === null ? '' : await io.store.readBlob(record.hash).catch(() => '')
+    decideFileFromHunks(record, before, after)
     const next = await persist(io, index)
     await io.writeFile(record.path, nextText)
     return next

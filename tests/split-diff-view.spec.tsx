@@ -69,6 +69,7 @@ describe('SplitDiffView', () => {
     }))
     await flush()
     expect(container.querySelector('[data-lh-split]')).not.toBeNull()
+    expect(container.querySelector('.dsh_lh_minimap')).not.toBeNull()
     expect(container.textContent).toContain('package com.old;')
     expect(container.textContent).toContain('package com.new;')
     expect(container.textContent).not.toContain('live')

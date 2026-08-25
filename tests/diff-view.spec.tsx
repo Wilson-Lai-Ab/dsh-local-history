@@ -101,6 +101,7 @@ describe('DiffView', () => {
     }))
     await flush()
     expect(marks(container)).toEqual(['ctx:a', 'add:C'])
+    expect(container.querySelector('.dsh_lh_minimap')).not.toBeNull()
     expect(container.textContent).not.toContain('B')
     expect(readBlob.mock.calls.map((call) => call[2])).toEqual(['before'])
     root.unmount()
@@ -126,6 +127,40 @@ describe('DiffView', () => {
     expect(container.textContent).not.toContain('live')
     expect(container.querySelector('.dsh_lh_code')?.innerHTML).toContain('data-tok="kw"')
     expect(undoFileButton(container)).toBeDefined()
+    root.unmount()
+  })
+
+  it('hides keep/undo on a decided file and only paints the diff', async () => {
+    const { root, container } = mount(createElement(DiffView, {
+      record: { ...record, decision: 'accepted' },
+      sessionId: 'sess-1',
+      cwd: '/proj',
+      afterHash: 'after',
+      remote: fakeRemote({
+        readBlob: async (_sessionId: string, _cwd: string | undefined, hash: string) => (
+          ok({ content: hash === 'after' ? 'keep\nnew\n' : 'keep\nold\n' })
+        ),
+      }),
+      t: lookup,
+    }))
+    await flush()
+    expect(container.querySelector('.dsh_lh_reviewBar')).toBeNull()
+    expect(container.querySelector('.dsh_lh_inlineBar')).toBeNull()
+    expect(container.querySelector('.dsh_lh_rowLine[data-mark="add"]')).not.toBeNull()
+    root.unmount()
+  })
+
+  it('hides the review minimap when editorMinimap is off', async () => {
+    const { root, container } = mount(createElement(DiffView, {
+      record,
+      sessionId: 'sess-1',
+      cwd: '/proj',
+      remote: fakeRemote(),
+      t: lookup,
+      prefs: { getSnapshot: () => ({ prefs: { editorMinimap: false } }) },
+    }))
+    await flush()
+    expect(container.querySelector('.dsh_lh_minimap')).toBeNull()
     root.unmount()
   })
 

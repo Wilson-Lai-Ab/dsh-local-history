@@ -7,6 +7,7 @@ import { type ReactNode } from 'react';
 import type { HistoryRecord } from '../types.ts';
 import type { LocalHistoryFace } from './remote.ts';
 import type { Translate } from './locales.ts';
+import { type MinimapPrefsSource } from './review-minimap.ts';
 export interface DiffViewProps {
     record: HistoryRecord;
     sessionId: string;
@@ -20,5 +21,6 @@ export interface DiffViewProps {
     onFileDone?: () => void;
     onRecord?: (record: HistoryRecord) => void;
     visible?: boolean;
+    prefs?: MinimapPrefsSource;
 }
 export declare function DiffView(props: DiffViewProps): ReactNode;

@@ -266,6 +266,23 @@ describe('acceptHunk', () => {
     expect(agent?.decision).toBe('accepted')
     expect(await readFile(filePath, 'utf8')).toBe(newT)
   })
+
+  it('marks the file accepted from original hunk keys even if disk drifted', async () => {
+    root = await mkdtemp(join(tmpdir(), 'lh-act-'))
+    const store = new HistoryStore(join(root, 'hist'))
+    const filePath = join(root, 'a.ts')
+    const oldT = 'a\nb\nc\n'
+    const newT = 'a\nX\nb\nY\nc\n'
+    await pendingAgent(store, filePath, oldT, newT)
+    const hunks = hunksFromTexts(oldT, newT)
+    expect(hunks).toHaveLength(2)
+    await writeFile(filePath, 'a\nX\nb\nY\nc\nZ\n')
+    const io = ioFor(store, 'sess-1')
+    await acceptHunk(io, 'agent-1', hunks[0]!.key)
+    expect((await store.load()).records.find((r) => r.id === 'agent-1')?.decision).toBe('pending')
+    const index = await acceptHunk(io, 'agent-1', hunks[1]!.key)
+    expect(index.records.find((r) => r.id === 'agent-1')?.decision).toBe('accepted')
+  })
 })
 
 describe('restoreSnapshot', () => {
