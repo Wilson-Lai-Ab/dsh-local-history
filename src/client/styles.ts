@@ -154,11 +154,14 @@ export const cssText = `
   font-weight: 700;
 }
 .dsh_lh_kind[data-kind='add'],
-.dsh_lh_name[data-kind='add'] { color: var(--dsw-alias-state-success-primary); }
+.dsh_lh_name[data-kind='add'],
+.dsh_lh_location[data-kind='add'] { color: var(--dsw-alias-state-success-primary); }
 .dsh_lh_kind[data-kind='delete'],
-.dsh_lh_name[data-kind='delete'] { color: var(--dsw-alias-state-error-primary); }
+.dsh_lh_name[data-kind='delete'],
+.dsh_lh_location[data-kind='delete'] { color: var(--dsw-alias-state-error-primary); }
 .dsh_lh_kind[data-kind='edit'],
-.dsh_lh_name[data-kind='edit'] { color: var(--dsw-alias-brand-primary); }
+.dsh_lh_name[data-kind='edit'],
+.dsh_lh_location[data-kind='edit'] { color: var(--dsw-alias-state-business-primary); }
 .dsh_lh_name {
   flex: none;
   max-width: 55%;

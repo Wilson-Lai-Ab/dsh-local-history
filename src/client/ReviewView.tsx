@@ -305,7 +305,7 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
                         <span className="dsh_lh_kind" data-kind={record.kind}>{kindBadge(record.kind)}</span>
                         <span className="dsh_lh_name" data-kind={record.kind}>{shown.name}</span>
                         {shown.location !== null && (
-                          <span className="dsh_lh_location">{t('ofLocation', { path: shown.location })}</span>
+                          <span className="dsh_lh_location" data-kind={record.kind}>{t('ofLocation', { path: shown.location })}</span>
                         )}
                         {shown.module !== null && (
                           <span className="dsh_lh_module">{shown.module}</span>
