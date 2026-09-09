@@ -22,6 +22,11 @@ describe('projectKey', () => {
   it('wraps a readable cwd', () => {
     expect(projectKey('/Users/me/work')).toBe('--Users-me-work--')
   })
+  it('collapses a trailing slash so listReview hits the same session folder', () => {
+    expect(projectKey('/Users/me/work/')).toBe('--Users-me-work--')
+    expect(sessionDir('/tmp/sessions', '/proj/', 's').replace(/\\/g, '/'))
+      .toBe('/tmp/sessions/--proj--/s')
+  })
   it('collapses consecutive separators', () => {
     expect(projectKey('C:\\foo\\bar')).toBe('--C-foo-bar--')
   })

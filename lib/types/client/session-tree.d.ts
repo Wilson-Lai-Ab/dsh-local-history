@@ -19,6 +19,11 @@ export interface SessionBinding {
             nodes?: readonly unknown[];
         };
     };
+    eventSource?: {
+        getSnapshot?: () => {
+            entries?: readonly unknown[];
+        };
+    };
 }
 export interface SessionsFace {
     list?: {

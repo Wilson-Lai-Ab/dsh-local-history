@@ -134,8 +134,9 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
       setPendingCount(null)
       return
     }
+    if (props.visible === false) return
     void syncThenList()
-  }, [cwd, scope.sessionId])
+  }, [cwd, scope.sessionId, props.visible])
 
   useEffect(() => {
     if (cwd === undefined || cwd === '') return

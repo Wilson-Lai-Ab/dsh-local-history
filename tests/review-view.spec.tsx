@@ -243,6 +243,30 @@ describe('ReviewApp', () => {
     root.unmount()
   })
 
+  it('reloads the list when the tab becomes visible', async () => {
+    const listReview = vi.fn(async () => ok({ records: [pending], pending: 1 }))
+    const remote = fakeRemote({ listReview })
+    const { root } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote,
+      t: lookup,
+      visible: false,
+    }))
+    await flush()
+    const afterHidden = listReview.mock.calls.length
+    flushSync(() => {
+      root.render(createElement(ReviewApp, {
+        scope: { sessionId: 'sess-1', cwd: '/proj' },
+        remote,
+        t: lookup,
+        visible: true,
+      }))
+    })
+    await flush()
+    expect(listReview.mock.calls.length).toBeGreaterThan(afterHidden)
+    root.unmount()
+  })
+
   it('does not poll the review list on an interval', async () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
     const { root } = mount(createElement(ReviewApp, {

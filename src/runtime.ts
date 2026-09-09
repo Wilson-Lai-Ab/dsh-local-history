@@ -12,7 +12,7 @@ import { acceptFile, acceptHunk, rejectFile, rejectHunk, reopenRecord, restoreSn
 import type { ReviewHunk } from './history/hunks.ts'
 import { HistoryStore } from './history/store.ts'
 import type { HistoryLimits, HistoryRecord } from './types.ts'
-import { defaultSessionsRoot, historyDir, projectKey, sessionDir } from './session-path.ts'
+import { defaultSessionsRoot, historyDir, normalizeCwd, projectKey, sessionDir } from './session-path.ts'
 import { pendingCount } from './pending-latest.ts'
 import { handleWatchWrite, startWatcher, type WatchHandle } from './watch/watcher.ts'
 
@@ -94,21 +94,22 @@ export class LocalHistoryRuntime {
   }
 
   async listReview(sessionId: string, cwd?: string): Promise<{ records: HistoryRecord[]; pending: number }> {
-    const records = (await this.storeFor(sessionId, cwd).load()).records.filter((record) => record.source === 'agent')
+    const records = (await this.storeFor(sessionId, normalizeCwd(cwd)).load()).records.filter((record) => record.source === 'agent')
     return { records, pending: pendingCount(records) }
   }
 
   async listTimeline(sessionId: string, cwd: string | undefined, path: string): Promise<{ records: HistoryRecord[] }> {
     const root = defaultSessionsRoot()
     const wanted = normalizePath(path)
-    if (cwd === undefined || cwd === '') {
+    const normalized = normalizeCwd(cwd)
+    if (normalized === undefined) {
       const records = (await this.storeFor(sessionId, cwd).load()).records
         .filter((record) => normalizePath(record.path) === wanted)
         .slice()
         .sort((a, b) => b.mtime - a.mtime)
       return { records }
     }
-    const project = join(root, projectKey(cwd))
+    const project = join(root, projectKey(normalized))
     let names: string[]
     try {
       names = await readdir(project)
@@ -167,24 +168,25 @@ export class LocalHistoryRuntime {
   }
 
   async syncSession(sessionId: string, cwd: string | undefined, hits: AgentCardHit[]): Promise<{ pending: number }> {
-    if (cwd !== undefined && cwd !== '') {
-      const key = sessionWatchKey(sessionId, cwd)
-      this.knownSessions.set(key, { sessionId, cwd })
+    const normalized = normalizeCwd(cwd)
+    if (normalized !== undefined) {
+      const key = sessionWatchKey(sessionId, normalized)
+      this.knownSessions.set(key, { sessionId, cwd: normalized })
       this.lastHits.set(key, [...hits])
     } else {
       this.lastHits.set(sessionId, [...hits])
     }
-    const store = this.storeFor(sessionId, cwd)
+    const store = this.storeFor(sessionId, normalized)
     const settings = this.settings.get()
     await claimAgentCards({
       store,
       sessionId,
-      cwd,
+      cwd: normalized,
       hits,
       limits: limitsFromSettings(settings),
       readCurrent: readWorkspaceCurrent,
     })
-    if (settings.watchEnabled && cwd !== undefined && cwd !== '') this.ensureWatcher(sessionId, cwd)
+    if (settings.watchEnabled && normalized !== undefined) this.ensureWatcher(sessionId, normalized)
     const records = (await store.load()).records
     return { pending: pendingCount(records) }
   }
@@ -194,7 +196,7 @@ export class LocalHistoryRuntime {
   }
 
   private storeFor(sessionId: string, cwd: string | undefined): HistoryStore {
-    const root = historyDir(sessionDir(defaultSessionsRoot(), cwd, sessionId))
+    const root = historyDir(sessionDir(defaultSessionsRoot(), normalizeCwd(cwd), sessionId))
     const cached = this.stores.get(root)
     if (cached !== undefined) return cached
     const store = new HistoryStore(root)

@@ -21,12 +21,10 @@ export declare function reviewLocations(view: unknown): {
     path: string;
     kind: AgentEditKind;
 }[];
+/** Hits from current DSH fs tools (`edit` / `write`) on a settled tool-result. */
+export declare function hitFromMutationTool(name: unknown, argsRaw: unknown, cwd: string | undefined, turn: number | undefined): AgentCardHit | undefined;
 /** Hunk snippets for this path (`newText` required so they can be undone). */
 export declare function diffsOf(view: unknown, path: string): FileDiffHunk[];
 /** Last tool card's old-file snapshot for this path (`null` = created). */
 export declare function oldTextOf(view: unknown, path: string): string | null | undefined;
-/**
-  * Flatten conversation nodes into one hit per (turn, path). Paths are
-  * resolved against cwd when provided.
-  */
 export declare function collectSessionEdits(nodes: readonly unknown[], cwd?: string): AgentCardHit[];

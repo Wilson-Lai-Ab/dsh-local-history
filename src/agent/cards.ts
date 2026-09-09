@@ -84,6 +84,67 @@ function reviewViewsOf(node: unknown): unknown[] {
   return [record.callView, record.resultView].filter((view) => view !== null && view !== undefined)
 }
 
+function parseToolArgs(raw: unknown): Record<string, unknown> | undefined {
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>
+  if (typeof raw !== 'string' || raw === '') return undefined
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function sessionEventOf(node: unknown): { type?: unknown; data?: unknown } | undefined {
+  if (node === null || typeof node !== 'object') return undefined
+  const wrapper = node as { type?: unknown; event?: unknown }
+  if (wrapper.type === 'event' && wrapper.event !== null && typeof wrapper.event === 'object') {
+    return wrapper.event as { type?: unknown; data?: unknown }
+  }
+  if (typeof wrapper.type === 'string' && 'data' in wrapper) return node as { type?: unknown; data?: unknown }
+  return undefined
+}
+
+function resultIsError(data: unknown): boolean {
+  if (data === null || typeof data !== 'object') return false
+  const content = (data as { message?: { content?: unknown } }).message?.content
+  if (!Array.isArray(content) || content[0] === null || typeof content[0] !== 'object') return false
+  return (content[0] as { isError?: unknown }).isError === true
+}
+
+function resultCallId(data: unknown): string | undefined {
+  if (data === null || typeof data !== 'object') return undefined
+  const id = (data as { message?: { source?: { callId?: unknown } } }).message?.source?.callId
+  return typeof id === 'string' && id !== '' ? id : undefined
+}
+
+/** Hits from current DSH fs tools (`edit` / `write`) on a settled tool-result. */
+export function hitFromMutationTool(
+  name: unknown,
+  argsRaw: unknown,
+  cwd: string | undefined,
+  turn: number | undefined,
+): AgentCardHit | undefined {
+  if (name !== 'edit' && name !== 'write') return undefined
+  const args = parseToolArgs(argsRaw)
+  if (args === undefined) return undefined
+  const filePath = args.file_path
+  if (typeof filePath !== 'string' || filePath === '') return undefined
+  const path = resolveProjectPath(cwd, filePath)
+  if (name === 'write') return { path, kind: 'add', oldText: null, turn }
+  const oldString = args.old_string
+  const newString = args.new_string
+  if (typeof oldString !== 'string' || typeof newString !== 'string') return undefined
+  return {
+    path,
+    kind: 'edit',
+    oldText: oldString,
+    turn,
+    diffs: [{ oldText: oldString, newText: newString }],
+  }
+}
+
 /** Hunk snippets for this path (`newText` required so they can be undone). */
 export function diffsOf(view: unknown, path: string): FileDiffHunk[] {
   if (view === null || typeof view !== 'object') return []
@@ -122,36 +183,69 @@ export function oldTextOf(view: unknown, path: string): string | null | undefine
   * Flatten conversation nodes into one hit per (turn, path). Paths are
   * resolved against cwd when provided.
   */
+function upsertHit(byKey: Map<string, AgentCardHit>, order: string[], hit: AgentCardHit): void {
+  const key = `${hit.turn ?? 'x'}\n${hit.path}`
+  const existing = byKey.get(key)
+  if (existing === undefined) {
+    order.push(key)
+    byKey.set(key, hit)
+    return
+  }
+  existing.kind = hit.kind
+  if (existing.oldText === undefined && hit.oldText !== undefined) existing.oldText = hit.oldText
+  if (existing.oldText === null) existing.kind = 'add'
+  if (hit.diffs !== undefined && hit.diffs.length > 0) existing.diffs = hit.diffs
+}
+
 export function collectSessionEdits(nodes: readonly unknown[], cwd?: string): AgentCardHit[] {
   const byKey = new Map<string, AgentCardHit>()
   const order: string[] = []
+  const pendingCalls = new Map<string, { name: unknown; argsRaw: unknown; turn: number | undefined }>()
   let turn: number | undefined
   for (const node of nodes) {
     if (node === null || typeof node !== 'object') continue
-    const record = node as { kind?: unknown; isError?: unknown; turn?: unknown }
+    const event = sessionEventOf(node)
+    if (event !== undefined) {
+      const data = event.data
+      if (event.type === 'tool/call' && data !== null && typeof data === 'object') {
+        const record = data as { turn?: unknown; callId?: unknown; name?: unknown; arguments?: unknown }
+        if (typeof record.turn === 'number') turn = record.turn
+        if (typeof record.callId === 'string' && record.callId !== '') {
+          pendingCalls.set(record.callId, { name: record.name, argsRaw: record.arguments, turn })
+        }
+        continue
+      }
+      if (event.type === 'tool/result' && data !== null && typeof data === 'object') {
+        const record = data as { turn?: unknown }
+        if (typeof record.turn === 'number') turn = record.turn
+        const callId = resultCallId(data)
+        const pending = callId === undefined ? undefined : pendingCalls.get(callId)
+        if (pending !== undefined && !resultIsError(data)) {
+          const hit = hitFromMutationTool(pending.name, pending.argsRaw, cwd, pending.turn ?? turn)
+          if (hit !== undefined) upsertHit(byKey, order, hit)
+        }
+        continue
+      }
+    }
+    const record = node as { kind?: unknown; isError?: unknown; turn?: unknown; call?: { name?: unknown; argsRaw?: unknown } }
     if (record.kind === 'user' || record.kind === 'steering') continue
     if (typeof record.turn === 'number') turn = record.turn
     if (record.kind !== 'tool-result' || record.isError === true) continue
+    let foundView = false
     for (const view of reviewViewsOf(node)) {
       for (const location of reviewLocations(view)) {
+        foundView = true
         const path = resolveProjectPath(cwd, location.path)
         const oldText = oldTextOf(view, location.path)
         const hunks = diffsOf(view, location.path)
-        const key = `${turn ?? 'x'}\n${path}`
-        const existing = byKey.get(key)
-        if (existing === undefined) {
-          order.push(key)
-          const hit: AgentCardHit = { path, kind: location.kind, turn, oldText }
-          if (hunks.length > 0) hit.diffs = hunks
-          byKey.set(key, hit)
-        } else {
-          existing.kind = location.kind
-          if (existing.oldText === undefined && oldText !== undefined) existing.oldText = oldText
-          if (existing.oldText === null) existing.kind = 'add'
-          if (hunks.length > 0) existing.diffs = hunks
-        }
+        const hit: AgentCardHit = { path, kind: location.kind, turn, oldText }
+        if (hunks.length > 0) hit.diffs = hunks
+        upsertHit(byKey, order, hit)
       }
     }
+    if (foundView) continue
+    const hit = hitFromMutationTool(record.call?.name, record.call?.argsRaw, cwd, turn)
+    if (hit !== undefined) upsertHit(byKey, order, hit)
   }
   return order.map((key) => byKey.get(key)!).filter((row): row is AgentCardHit => row !== undefined)
 }

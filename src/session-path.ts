@@ -1,8 +1,8 @@
 /**
  * Session-directory encoding. `encodeSessionSegment` and `projectKey` are
- * copied verbatim from DSH-better-sidebar `src/review/review-disk.ts` so
- * local-history lives next to DSH's `session.jsonl.zstd` and the sidebar
- * review ledger.
+ * copied from DSH's jsonl session encoding so local-history lives next to
+ * `session.jsonl.zstd`. Trailing slashes on `cwd` are stripped so `/proj`
+ * and `/proj/` share one folder.
  */
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -22,13 +22,21 @@ export function encodeSessionSegment(raw: string): string {
   return out
 }
 
+/** Drop trailing slashes so `/proj` and `/proj/` share one session folder. */
+export function normalizeCwd(cwd: string | undefined): string | undefined {
+  if (cwd === undefined) return undefined
+  const trimmed = cwd.replace(/[\\/]+$/, '')
+  return trimmed === '' ? undefined : trimmed
+}
+
 /** Human-navigable project folder under `~/.dsh/sessions`. */
 export function projectKey(cwd: string): string {
-  if (cwd.length === 0) throw new Error('cannot encode an empty project path')
+  const trimmed = normalizeCwd(cwd)
+  if (trimmed === undefined) throw new Error('cannot encode an empty project path')
   let readable = ''
   let separatorRun = false
-  for (let i = 0; i < cwd.length; i += 1) {
-    const ch = cwd[i]!
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i]!
     if (ch === '/' || ch === '\\' || ch === ':') {
       if (!separatorRun) readable += '-'
       separatorRun = true
@@ -50,7 +58,8 @@ export function defaultSessionsRoot(): string {
 }
 
 export function sessionDir(root: string, cwd: string | undefined, sessionId: string): string {
-  const project = cwd === undefined || cwd === '' ? join(root, '_no-cwd') : join(root, projectKey(cwd))
+  const normalized = normalizeCwd(cwd)
+  const project = normalized === undefined ? join(root, '_no-cwd') : join(root, projectKey(normalized))
   return join(project, encodeSessionSegment(sessionId))
 }
 

@@ -44,6 +44,97 @@ describe('collectSessionEdits', () => {
     const hits = collectSessionEdits([diffNode({ isError: true })], '/proj')
     expect(hits).toEqual([])
   })
+
+  it('yields an edit hit from a current DSH ToolResultNode with call.argsRaw', () => {
+    const hits = collectSessionEdits([
+      {
+        kind: 'tool-result',
+        turn: 2,
+        isError: false,
+        call: {
+          name: 'edit',
+          argsRaw: JSON.stringify({
+            file_path: 'docs/README.md',
+            old_string: 'old',
+            new_string: 'new',
+          }),
+        },
+      },
+    ], '/proj')
+    expect(hits).toEqual([
+      {
+        path: '/proj/docs/README.md',
+        kind: 'edit',
+        oldText: 'old',
+        turn: 2,
+        diffs: [{ oldText: 'old', newText: 'new' }],
+      },
+    ])
+  })
+
+  it('yields an add hit from a write tool call paired with a successful event-window result', () => {
+    const hits = collectSessionEdits([
+      {
+        type: 'event',
+        event: {
+          type: 'tool/call',
+          data: {
+            turn: 1,
+            callId: 'c1',
+            name: 'write',
+            arguments: JSON.stringify({ file_path: '/proj/a.ts', content: 'hello' }),
+          },
+        },
+      },
+      {
+        type: 'event',
+        event: {
+          type: 'tool/result',
+          data: {
+            turn: 1,
+            message: {
+              source: { callId: 'c1' },
+              content: [{ type: 'tool-result', isError: false }],
+            },
+          },
+        },
+      },
+    ], '/proj')
+    expect(hits).toEqual([
+      { path: '/proj/a.ts', kind: 'add', oldText: null, turn: 1 },
+    ])
+  })
+
+  it('ignores an edit whose event-window result is an error', () => {
+    const hits = collectSessionEdits([
+      {
+        type: 'event',
+        event: {
+          type: 'tool/call',
+          data: {
+            turn: 1,
+            callId: 'c1',
+            name: 'edit',
+            arguments: JSON.stringify({ file_path: 'a.ts', old_string: 'a', new_string: 'b' }),
+          },
+        },
+      },
+      {
+        type: 'event',
+        event: {
+          type: 'tool/result',
+          data: {
+            turn: 1,
+            message: {
+              source: { callId: 'c1' },
+              content: [{ type: 'tool-result', isError: true }],
+            },
+          },
+        },
+      },
+    ], '/proj')
+    expect(hits).toEqual([])
+  })
 })
 
 describe('claimAgentCards', () => {

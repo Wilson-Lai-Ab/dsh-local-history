@@ -21,6 +21,9 @@ export interface SessionBinding {
   session?: {
     getSnapshot?: () => { nodes?: readonly unknown[] }
   }
+  eventSource?: {
+    getSnapshot?: () => { entries?: readonly unknown[] }
+  }
 }
 
 export interface SessionsFace {
@@ -69,9 +72,11 @@ export function collectTreeHits(
   const ids = treeSessionIds(byId, sessionId)
   const hits: AgentCardHit[] = []
   for (const id of ids) {
-    const nodes = sessions?.binding?.(id)?.session?.getSnapshot?.()?.nodes ?? []
+    const binding = sessions?.binding?.(id)
+    const nodes = binding?.session?.getSnapshot?.()?.nodes ?? []
+    const entries = binding?.eventSource?.getSnapshot?.()?.entries ?? []
     const childCwd = byId[id]?.cwd ?? cwd
-    hits.push(...collectSessionEdits(nodes, childCwd))
+    hits.push(...collectSessionEdits([...nodes, ...entries], childCwd))
   }
   return hits
 }
@@ -86,8 +91,10 @@ export function collectTreePrompts(
   const ids = treeSessionIds(byId, sessionId)
   const prompts = new Map<number | 'x', string>()
   for (const id of ids) {
-    const nodes = sessions?.binding?.(id)?.session?.getSnapshot?.()?.nodes ?? []
-    for (const [turn, prompt] of collectTurnPrompts(nodes)) {
+    const binding = sessions?.binding?.(id)
+    const nodes = binding?.session?.getSnapshot?.()?.nodes ?? []
+    const entries = binding?.eventSource?.getSnapshot?.()?.entries ?? []
+    for (const [turn, prompt] of collectTurnPrompts([...nodes, ...entries])) {
       if (!prompts.has(turn)) prompts.set(turn, prompt)
     }
   }
