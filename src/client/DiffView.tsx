@@ -3,7 +3,8 @@
  * struck through in place, additions highlighted. Hunk accept/reject
  * appear on hover at the top-right of the painted block, with a line range.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Component, createElement, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { paintFileDiff, type PaintRow, type ReviewHunk } from '../history/hunks.ts'
 import type { HistoryRecord } from '../types.ts'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
@@ -54,6 +55,11 @@ export function DiffView(props: DiffViewProps): ReactNode {
   const liveRef = useRef(false)
   const [fileEl, setFileEl] = useState<HTMLDivElement | null>(null)
   const minimapOn = useEditorMinimap(props.prefs)
+  const markdown = isMarkdownPath(record.path)
+  const [mode, setMode] = useState<'preview' | 'edit'>('edit')
+  useEffect(() => {
+    setMode('edit')
+  }, [record.path])
 
   useEffect(() => {
     liveRef.current = false
@@ -249,11 +255,33 @@ export function DiffView(props: DiffViewProps): ReactNode {
   )
   const blocks = groupPaintRows(rows.map((row, index) => ({ ...row, html: highlighted[index] ?? '' })))
 
+  const showPreview = markdown && mode === 'preview'
   return (
     <div className="dsh_lh_root dsh_lh_pane" data-lh-diff="">
-      {!decided && (
+      {(markdown || !decided) && (
       <div className="dsh_lh_reviewBar">
-        <span className="dsh_lh_reviewHint">{t('agentEdited')}</span>
+        {markdown && (
+          <div className="dsh_lh_modeToggle">
+            <button
+              type="button"
+              className="dsh_lh_modeButton"
+              data-active={mode === 'preview' ? 'true' : 'false'}
+              onClick={() => { setMode('preview') }}
+            >
+              {t('preview')}
+            </button>
+            <button
+              type="button"
+              className="dsh_lh_modeButton"
+              data-active={mode === 'edit' ? 'true' : 'false'}
+              onClick={() => { setMode('edit') }}
+            >
+              {t('edit')}
+            </button>
+          </div>
+        )}
+        {!decided && <span className="dsh_lh_reviewHint">{t('agentEdited')}</span>}
+        {!decided && (
         <div className="dsh_lh_reviewActions">
           <button
             type="button"
@@ -273,10 +301,26 @@ export function DiffView(props: DiffViewProps): ReactNode {
             {t('keepFile')}
           </button>
         </div>
+        )}
       </div>
       )}
       {state.binary ? (
         <div className="dsh_lh_empty">{t('binaryFile')}</div>
+      ) : showPreview ? (
+        <PreviewBoundary fallback={t('loadFailed')}>
+          <div className="dsh_lh_md">
+            {createElement(MarkdownText, {
+              text: state.after,
+              codeLabels: { copyLabel: t('copy'), copiedLabel: t('copied') },
+              labels: {
+                code: { copyLabel: t('copy'), copiedLabel: t('copied') },
+                footnotes: t('markdownFootnotes'),
+              },
+            } as Parameters<typeof MarkdownText>[0] & {
+              labels: { code: { copyLabel: string; copiedLabel: string }; footnotes: string }
+            })}
+          </div>
+        </PreviewBoundary>
       ) : (
         <div className="dsh_lh_fileWrap">
         <div className="dsh_lh_file" ref={setFileEl}>
@@ -329,6 +373,29 @@ export function DiffView(props: DiffViewProps): ReactNode {
       )}
     </div>
   )
+}
+
+function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(path)
+}
+
+class PreviewBoundary extends Component<{ children?: ReactNode; fallback: string }, { error: string | null }> {
+  state = { error: null as string | null }
+
+  static getDerivedStateFromError(error: unknown): { error: string } {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[dsh-local-history] markdown preview error:', error, info.componentStack)
+  }
+
+  render(): ReactNode {
+    if (this.state.error !== null) {
+      return <div className="dsh_lh_error">{this.props.fallback}</div>
+    }
+    return this.props.children
+  }
 }
 
 function acceptedHunkKeys(record: HistoryRecord): ReadonlySet<string> {

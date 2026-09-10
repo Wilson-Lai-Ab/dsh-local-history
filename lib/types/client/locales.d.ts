@@ -54,6 +54,11 @@ export declare const zh: {
     daysAgo: string;
     unitMb: string;
     unitDays: string;
+    preview: string;
+    edit: string;
+    copy: string;
+    copied: string;
+    markdownFootnotes: string;
 };
 export type LocalHistoryKey = keyof typeof zh;
 /** English dictionary, checked complete against the zh key set. */

@@ -150,6 +150,65 @@ describe('DiffView', () => {
     root.unmount()
   })
 
+  it('lets markdown files switch between preview and edit like the explorer editor', async () => {
+    const { root, container } = mount(createElement(DiffView, {
+      record: { ...record, path: '/proj/docs/note.md' },
+      sessionId: 'sess-1',
+      cwd: '/proj',
+      remote: fakeRemote({
+        readCurrent: async () => ok({ content: '# Hello\n\nworld\n', binary: false }),
+      }),
+      t: lookup,
+    }))
+    await flush()
+    const preview = [...container.querySelectorAll('button')].find((item) => item.textContent === zh.preview)
+    const edit = [...container.querySelectorAll('button')].find((item) => item.textContent === zh.edit)
+    expect(preview).toBeDefined()
+    expect(edit).toBeDefined()
+    expect(container.querySelector('.dsh_lh_file')).not.toBeNull()
+    expect(container.querySelector('.dsh_lh_md')).toBeNull()
+    flushSync(() => { preview!.click() })
+    expect(container.querySelector('.dsh_lh_md')).not.toBeNull()
+    expect(container.querySelector('.dsh_lh_file')).toBeNull()
+    flushSync(() => { edit!.click() })
+    expect(container.querySelector('.dsh_lh_file')).not.toBeNull()
+    expect(container.querySelector('.dsh_lh_md')).toBeNull()
+    root.unmount()
+  })
+
+  it('keeps the review bar when markdown preview throws', async () => {
+    const { root, container } = mount(createElement(DiffView, {
+      record: { ...record, path: '/proj/docs/note.md' },
+      sessionId: 'sess-1',
+      cwd: '/proj',
+      remote: fakeRemote({
+        readCurrent: async () => ok({ content: '# Hello THROW_PREVIEW\n', binary: false }),
+      }),
+      t: lookup,
+    }))
+    await flush()
+    const preview = [...container.querySelectorAll('button')].find((item) => item.textContent === zh.preview)
+    flushSync(() => { preview!.click() })
+    expect(container.querySelector('.dsh_lh_reviewBar')).not.toBeNull()
+    expect(container.textContent).toContain(zh.loadFailed)
+    expect([...container.querySelectorAll('button')].map((item) => item.textContent)).toContain(zh.edit)
+    root.unmount()
+  })
+
+  it('does not show preview/edit on a plain source file', async () => {
+    const { root, container } = mount(createElement(DiffView, {
+      record,
+      sessionId: 'sess-1',
+      cwd: '/proj',
+      remote: fakeRemote(),
+      t: lookup,
+    }))
+    await flush()
+    expect([...container.querySelectorAll('button')].map((item) => item.textContent)).not.toContain(zh.preview)
+    expect(container.querySelector('.dsh_lh_file')).not.toBeNull()
+    root.unmount()
+  })
+
   it('hides the review minimap when editorMinimap is off', async () => {
     const { root, container } = mount(createElement(DiffView, {
       record,

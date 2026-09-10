@@ -56,6 +56,11 @@ export const zh = {
   daysAgo: '{n} 天前',
   unitMb: 'MB',
   unitDays: '天',
+  preview: '预览',
+  edit: '编辑',
+  copy: '复制',
+  copied: '已复制',
+  markdownFootnotes: '脚注',
 } satisfies Record<string, string>
 
 export type LocalHistoryKey = keyof typeof zh
@@ -110,6 +115,11 @@ export const en: { [K in LocalHistoryKey]: string } = {
   daysAgo: '{n} days ago',
   unitMb: 'MB',
   unitDays: 'days',
+  preview: 'Preview',
+  edit: 'Edit',
+  copy: 'Copy',
+  copied: 'Copied',
+  markdownFootnotes: 'Footnotes',
 }
 
 export type Translate = (key: string, params?: Record<string, string>) => string
