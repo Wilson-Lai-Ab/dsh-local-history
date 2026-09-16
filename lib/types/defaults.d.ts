@@ -1,5 +1,10 @@
 /** Directory basenames skipped by the workspace watcher (sidebar-aligned). */
-export declare const DEFAULT_IGNORE_DIRS: readonly ["node_modules", ".git", "dist", "lib", "coverage", ".pnpm-store", "target", "build", ".next", ".turbo", "out"];
+export declare const DEFAULT_IGNORE_DIRS: readonly ["node_modules", ".git", "dist", "lib", "coverage", ".pnpm-store", "target", "build", ".next", ".turbo", "out", "logs"];
+/**
+ * Largest file content worth snapshotting. Anything bigger is neither
+ * reviewable nor affordable to keep, so it is not recorded at all.
+ */
+export declare const MAX_SNAPSHOT_BYTES: number;
 export declare const MAX_PER_FILE = 50;
 export declare const MAX_BYTES: number;
 export declare const RETENTION_DAYS = 30;

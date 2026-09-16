@@ -46,6 +46,7 @@ export declare const zh: {
     fileCount: string;
     ofLocation: string;
     noPrompt: string;
+    tooLargeFile: string;
     turn: string;
     turnUnknown: string;
     justNow: string;

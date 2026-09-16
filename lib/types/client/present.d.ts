@@ -9,10 +9,9 @@ export declare function presentReviewHit(path: string, cwd?: string): ReviewHitP
 export declare function promptPreview(prompt: string, max?: number): string;
 /** One user input: the message that opened it, plus its ordinal when known. */
 export interface TurnRound {
-    /**
-     * 1-based user-input ordinal. Absent when the loaded event window does not
-     * reach the session start, so the ordinal cannot be counted honestly.
-     */
+    /** Engine turn that opened this user round; stable even when unnumbered. */
+    sinceTurn: number | undefined;
+    /** 1-based user-input ordinal, absent when the window is partial. */
     round?: number;
     prompt: string;
 }
