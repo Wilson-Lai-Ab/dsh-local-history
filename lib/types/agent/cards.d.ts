@@ -21,6 +21,15 @@ export declare function reviewLocations(view: unknown): {
     path: string;
     kind: AgentEditKind;
 }[];
+/**
+  * Unwrap one event-window entry (`{type:'event', event}`) or accept a raw
+  * session event. Shared by the card collector and the client's turn/round
+  * reader so both understand exactly one entry shape.
+  */
+export declare function sessionEventOf(node: unknown): {
+    type?: unknown;
+    data?: unknown;
+} | undefined;
 /** Hits from current DSH fs tools (`edit` / `write`) on a settled tool-result. */
 export declare function hitFromMutationTool(name: unknown, argsRaw: unknown, cwd: string | undefined, turn: number | undefined): AgentCardHit | undefined;
 /** Hunk snippets for this path (`newText` required so they can be undone). */
