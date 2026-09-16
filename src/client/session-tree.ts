@@ -3,7 +3,7 @@
  * Reimplements sidebar treeSessionIds without importing better-sidebar.
  */
 import { collectSessionEdits, type AgentCardHit } from '../agent/cards.ts'
-import { collectTurnPrompts } from './present.ts'
+import { collectTurnRounds, type TurnRound } from './present.ts'
 
 export interface SessionSummary {
   id: string
@@ -18,11 +18,13 @@ export interface SessionListSnapshot {
 }
 
 export interface SessionBinding {
-  session?: {
-    getSnapshot?: () => { nodes?: readonly unknown[] }
-  }
+  /**
+   * The live session event window. This is the ONLY conversation source: the
+   * Session snapshot itself (`SessionSnapshot`) has no node list at all, so a
+   * `nodes` probe would always read empty.
+   */
   eventSource?: {
-    getSnapshot?: () => { entries?: readonly unknown[] }
+    getSnapshot?: () => { entries?: readonly unknown[]; hasMore?: boolean }
   }
 }
 
@@ -72,31 +74,31 @@ export function collectTreeHits(
   const ids = treeSessionIds(byId, sessionId)
   const hits: AgentCardHit[] = []
   for (const id of ids) {
-    const binding = sessions?.binding?.(id)
-    const nodes = binding?.session?.getSnapshot?.()?.nodes ?? []
-    const entries = binding?.eventSource?.getSnapshot?.()?.entries ?? []
+    const entries = sessions?.binding?.(id)?.eventSource?.getSnapshot?.()?.entries ?? []
     const childCwd = byId[id]?.cwd ?? cwd
-    hits.push(...collectSessionEdits([...nodes, ...entries], childCwd))
+    hits.push(...collectSessionEdits(entries, childCwd))
   }
   return hits
 }
 
-/** User prompts keyed by conversation turn for the current session tree. */
-export function collectTreePrompts(
+/** Engine turn → user input for the current session tree (root + subagents). */
+export function collectTreeRounds(
   sessions: SessionsFace | undefined,
   sessionId: string,
-): Map<number | 'x', string> {
+): Map<number | 'x', TurnRound> {
   const snapshot = sessions?.list?.getSnapshot?.() ?? {}
   const byId = snapshot.byId ?? {}
   const ids = treeSessionIds(byId, sessionId)
-  const prompts = new Map<number | 'x', string>()
+  const rounds = new Map<number | 'x', TurnRound>()
   for (const id of ids) {
-    const binding = sessions?.binding?.(id)
-    const nodes = binding?.session?.getSnapshot?.()?.nodes ?? []
-    const entries = binding?.eventSource?.getSnapshot?.()?.entries ?? []
-    for (const [turn, prompt] of collectTurnPrompts([...nodes, ...entries])) {
-      if (!prompts.has(turn)) prompts.set(turn, prompt)
+    const window = sessions?.binding?.(id)?.eventSource?.getSnapshot?.()
+    const entries = window?.entries ?? []
+    // An event window that still has older pages cannot be counted from 1
+    // honestly, so only the prompts travel — never a made-up ordinal.
+    const numbered = window?.hasMore !== true
+    for (const [turn, value] of collectTurnRounds(entries, { numbered })) {
+      if (!rounds.has(turn)) rounds.set(turn, value)
     }
   }
-  return prompts
+  return rounds
 }

@@ -148,6 +148,84 @@ describe('ReviewApp', () => {
     root.unmount()
   })
 
+  it('merges an auto-continued turn into the user round that opened it', async () => {
+    const records: HistoryRecord[] = [
+      { ...pending, id: 'rec-1', turn: 1, path: '/proj/src/one.ts', hash: 'h1', beforeHash: 'b1' },
+      { ...pending, id: 'rec-2', turn: 2, path: '/proj/src/two.ts', hash: 'h2', beforeHash: 'b2' },
+      { ...pending, id: 'rec-3', turn: 3, path: '/proj/src/three.ts', hash: 'h3', beforeHash: 'b3' },
+    ]
+    const event = (type: string, data: unknown) => ({ type: 'event', event: { type, data } })
+    const sessions = {
+      list: {
+        getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
+      },
+      binding: () => ({
+        eventSource: {
+          getSnapshot: () => ({
+            entries: [
+              event('turn/start', { turn: 1 }),
+              event('user/message', { content: [{ type: 'text', text: '第一问' }], source: { kind: 'user' } }),
+              event('turn/start', { turn: 2 }),
+              event('turn/start', { turn: 3 }),
+              event('user/message', { content: [{ type: 'text', text: '第二问' }], source: { kind: 'user' } }),
+            ],
+          }),
+        },
+      }),
+    }
+    const { root, container } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote: fakeRemote({ listReview: async () => ok({ records, pending: 3 }) }),
+      sessions,
+      t: lookup,
+    }))
+    await flush()
+    const groups = [...container.querySelectorAll('.dsh_lh_group')]
+    // turn 1 and the auto-continued turn 2 are ONE round carrying both files.
+    expect(groups).toHaveLength(2)
+    expect(groups.map((group) => group.querySelector('.dsh_lh_groupTurn')?.textContent))
+      .toEqual([zh.turn.replace('{n}', '2'), zh.turn.replace('{n}', '1')])
+    expect(groups.map((group) => group.querySelector('.dsh_lh_groupPrompt')?.textContent))
+      .toEqual(['第二问', '第一问'])
+    expect(groups[1]?.querySelectorAll('[data-lh-row]')).toHaveLength(2)
+    expect(container.textContent).not.toContain(zh.noPrompt)
+    root.unmount()
+  })
+
+  it('keeps prompts but no round ordinal when the event window misses the session start', async () => {
+    const records: HistoryRecord[] = [
+      { ...pending, id: 'rec-9', turn: 9, path: '/proj/src/nine.ts', hash: 'h9', beforeHash: 'b9' },
+    ]
+    const event = (type: string, data: unknown) => ({ type: 'event', event: { type, data } })
+    const sessions = {
+      list: {
+        getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
+      },
+      binding: () => ({
+        eventSource: {
+          getSnapshot: () => ({
+            hasMore: true,
+            entries: [
+              event('turn/start', { turn: 9 }),
+              event('user/message', { content: [{ type: 'text', text: '很久以后的第九问' }], source: { kind: 'user' } }),
+            ],
+          }),
+        },
+      }),
+    }
+    const { root, container } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote: fakeRemote({ listReview: async () => ok({ records, pending: 1 }) }),
+      sessions,
+      t: lookup,
+    }))
+    await flush()
+    expect(container.querySelector('.dsh_lh_groupPrompt')?.textContent).toBe('很久以后的第九问')
+    // Falls back to the engine turn rather than inventing "第 1 轮".
+    expect(container.querySelector('.dsh_lh_groupTurn')?.textContent).toBe(zh.turn.replace('{n}', '9'))
+    root.unmount()
+  })
+
   it('clicking a timeline snapshot opens compare against the previous snapshot', async () => {
     const older: HistoryRecord = {
       ...pending,

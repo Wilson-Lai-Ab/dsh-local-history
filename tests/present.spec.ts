@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectTurnPrompts, highlightLine, highlightLineHtml, highlightRowsHtml, highlightToHtml, presentReviewHit, promptPreview } from '../src/client/present.ts'
+import { collectTurnRounds, highlightLine, highlightLineHtml, highlightRowsHtml, highlightToHtml, presentReviewHit, promptPreview, roundAt } from '../src/client/present.ts'
 
 describe('presentReviewHit', () => {
   it('splits cwd-relative path into name, leftover folder, and module', () => {
@@ -18,13 +18,73 @@ describe('promptPreview', () => {
   })
 })
 
-describe('collectTurnPrompts', () => {
-  it('attaches the last user message to the following tool turn', () => {
-    const prompts = collectTurnPrompts([
-      { kind: 'user', text: '多行也要留些行不改' },
-      { kind: 'tool-result', turn: 46 },
+describe('collectTurnRounds', () => {
+  const event = (type: string, data: unknown) => ({ type: 'event', event: { type, data } })
+  const user = (text: string, kind = 'user') => event('user/message', {
+    content: [{ type: 'text', text }],
+    source: { kind },
+  })
+
+  it('numbers rounds by user input and skips auto-continued turns', () => {
+    const rounds = collectTurnRounds([
+      event('turn/start', { turn: 1 }),
+      user('第一问'),
+      event('turn/start', { turn: 2 }),
+      user('第二问'),
+      event('turn/start', { turn: 3 }),
+      event('turn/start', { turn: 4 }),
+      user('第三问'),
     ])
-    expect(prompts.get(46)).toBe('多行也要留些行不改')
+    expect(rounds.get(1)).toEqual({ round: 1, prompt: '第一问' })
+    expect(rounds.get(2)).toEqual({ round: 2, prompt: '第二问' })
+    expect(rounds.has(3)).toBe(false)
+    expect(rounds.get(4)).toEqual({ round: 3, prompt: '第三问' })
+  })
+
+  it('ignores injected user/message sources', () => {
+    const rounds = collectTurnRounds([
+      event('turn/start', { turn: 1 }),
+      user('技能目录', 'skill-catalog'),
+      user('插件注入', 'plugin'),
+      user('运行时上下文', 'agent-instructions'),
+    ])
+    expect(rounds.size).toBe(0)
+  })
+
+  it('lets the first message of a turn name its round', () => {
+    const rounds = collectTurnRounds([
+      event('turn/start', { turn: 1 }),
+      user('主问题'),
+      user('补一句'),
+    ])
+    expect(rounds.get(1)).toEqual({ round: 1, prompt: '主问题' })
+  })
+
+  it('binds a prompt that arrives before any turn/start to the first turn', () => {
+    const rounds = collectTurnRounds([user('先说的话'), event('turn/start', { turn: 1 })])
+    expect(rounds.get(1)).toEqual({ round: 1, prompt: '先说的话' })
+  })
+
+  it('keeps prompts but omits the ordinal when the window is not numbered', () => {
+    const rounds = collectTurnRounds([
+      event('turn/start', { turn: 9 }),
+      user('很久以后的第九问'),
+    ], { numbered: false })
+    expect(rounds.get(9)).toEqual({ prompt: '很久以后的第九问' })
+    expect(rounds.get(9)?.round).toBeUndefined()
+  })
+})
+
+describe('roundAt', () => {
+  it('merges a turn with no user input into the previous round', () => {
+    const rounds = new Map<number | 'x', { round: number; prompt: string }>([
+      [1, { round: 1, prompt: 'A' }],
+      [4, { round: 2, prompt: 'B' }],
+    ])
+    expect(roundAt(rounds, 3)).toEqual({ round: 1, prompt: 'A' })
+    expect(roundAt(rounds, 4)).toEqual({ round: 2, prompt: 'B' })
+    expect(roundAt(rounds, 1)).toEqual(rounds.get(1))
+    expect(roundAt(rounds, undefined)).toBeUndefined()
   })
 })
 

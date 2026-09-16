@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectTreeHits } from '../src/client/session-tree.ts'
+import { collectTreeHits, collectTreeRounds } from '../src/client/session-tree.ts'
 
 describe('collectTreeHits', () => {
   it('reads DSH eventSource entries when session snapshot has no nodes', () => {
@@ -8,9 +8,6 @@ describe('collectTreeHits', () => {
         getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
       },
       binding: () => ({
-        session: {
-          getSnapshot: () => ({}),
-        },
         eventSource: {
           getSnapshot: () => ({
             entries: [
@@ -57,5 +54,35 @@ describe('collectTreeHits', () => {
         diffs: [{ oldText: '# title', newText: '# title\n\nprobe' }],
       },
     ])
+  })
+})
+
+describe('collectTreeRounds', () => {
+  it('reads user rounds from eventSource entries when the session snapshot has no nodes', () => {
+    const rounds = collectTreeRounds({
+      list: {
+        getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
+      },
+      binding: () => ({
+        eventSource: {
+          getSnapshot: () => ({
+            entries: [
+              { type: 'event', event: { type: 'turn/start', data: { turn: 2 } } },
+              {
+                type: 'event',
+                event: {
+                  type: 'user/message',
+                  data: {
+                    content: [{ type: 'text', text: '改一下 README' }],
+                    source: { kind: 'user' },
+                  },
+                },
+              },
+            ],
+          }),
+        },
+      }),
+    }, 'sess-1')
+    expect(rounds.get(2)).toEqual({ round: 1, prompt: '改一下 README' })
   })
 })

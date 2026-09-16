@@ -14,8 +14,8 @@ import { notifyReviewChanged, setPendingCount, subscribeReviewChanged } from './
 import { applyReviewRevert, popReviewRedo, popReviewUndo, pushReviewRevert } from './review-revert.ts'
 import { bindReviewKeys } from './review-keys.ts'
 import { latestPendingPerPath } from '../pending-latest.ts'
-import { presentReviewHit, promptPreview } from './present.ts'
-import { collectTreeHits, collectTreePrompts, type SessionsFace } from './session-tree.ts'
+import { presentReviewHit, promptPreview, roundAt, type TurnRound } from './present.ts'
+import { collectTreeHits, collectTreeRounds, type SessionsFace } from './session-tree.ts'
 
 export interface SessionScope {
   sessionId: string
@@ -56,28 +56,44 @@ function matchesFilter(record: HistoryRecord, filter: Filter): boolean {
   return true
 }
 
-function groupByTurn(records: readonly HistoryRecord[], newestFirst: boolean): {
+interface ReviewGroup {
   key: string
+  /** User-input ordinal, absent when the turn cannot be mapped to one. */
+  round?: number
+  /** Engine turn, used as the label only when no round is known. */
   turn?: number
   time?: number
   records: HistoryRecord[]
-}[] {
-  const map = new Map<string, { key: string; turn?: number; time?: number; records: HistoryRecord[] }>()
+}
+
+/**
+  * Group by USER INPUT, not by engine turn: a turn with no user message of its
+  * own (an automatic continuation) belongs to the round that opened it.
+  */
+function groupByRound(
+  records: readonly HistoryRecord[],
+  rounds: ReadonlyMap<number | 'x', TurnRound>,
+  newestFirst: boolean,
+): ReviewGroup[] {
+  const map = new Map<string, ReviewGroup>()
   for (const record of records) {
-    const key = record.turn === undefined ? 'x' : String(record.turn)
+    const owned = roundAt(rounds, record.turn)
+    const key = owned !== undefined
+      ? `r${owned.round}`
+      : record.turn === undefined ? 'x' : `t${record.turn}`
     let group = map.get(key)
     if (group === undefined) {
-      group = { key, turn: record.turn, time: record.mtime, records: [] }
+      group = { key, round: owned?.round, turn: record.turn, time: record.mtime, records: [] }
       map.set(key, group)
     }
     group.records.push(record)
+    if (group.turn === undefined) group.turn = record.turn
     if (record.mtime > (group.time ?? 0)) group.time = record.mtime
   }
   const groups = [...map.values()]
+  const rank = (group: ReviewGroup): number => group.round ?? group.turn ?? -1
   groups.sort((a, b) => {
-    const aTurn = a.turn ?? -1
-    const bTurn = b.turn ?? -1
-    if (aTurn !== bTurn) return newestFirst ? bTurn - aTurn : aTurn - bTurn
+    if (rank(a) !== rank(b)) return newestFirst ? rank(b) - rank(a) : rank(a) - rank(b)
     const aTime = a.time ?? 0
     const bTime = b.time ?? 0
     return newestFirst ? bTime - aTime : aTime - bTime
@@ -157,10 +173,13 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
     if (filter === 'pending') return pending
     return records.filter((record) => matchesFilter(record, filter))
   }, [filter, pending, records])
-  const groups = useMemo(() => groupByTurn(filtered, filter !== 'done'), [filter, filtered])
-  const prompts = useMemo(
-    () => collectTreePrompts(sessions, scope.sessionId),
+  const rounds = useMemo(
+    () => collectTreeRounds(sessions, scope.sessionId),
     [sessions, scope.sessionId, records],
+  )
+  const groups = useMemo(
+    () => groupByRound(filtered, rounds, filter !== 'done'),
+    [filter, filtered, rounds],
   )
 
   const revert = (direction: 'undo' | 'redo'): boolean => {
@@ -269,13 +288,14 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
       <div className="dsh_lh_list" data-lh-full="">
         {groups.length === 0 && !error && <div className="dsh_lh_empty">{t('emptyList')}</div>}
         {groups.map((group) => {
-          const prompt = prompts.get(group.turn ?? 'x') ?? ''
+          const owned = roundAt(rounds, group.turn)
+          const label = group.round ?? group.turn
           return (
             <div key={group.key} className="dsh_lh_group">
               <div className="dsh_lh_groupHeader">
                 <div className="dsh_lh_groupMeta">
                   <span className="dsh_lh_groupTurn">
-                    {group.turn === undefined ? t('turnUnknown') : t('turn', { n: String(group.turn) })}
+                    {label === undefined ? t('turnUnknown') : t('turn', { n: String(label) })}
                   </span>
                   {group.time !== undefined && (
                     <span className="dsh_lh_groupTime">{relativeTimeLong(group.time, t)}</span>
@@ -283,7 +303,7 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
                   <span className="dsh_lh_groupCount">{t('fileCount', { n: String(group.records.length) })}</span>
                 </div>
                 <div className="dsh_lh_groupPrompt">
-                  {prompt === '' ? t('noPrompt') : promptPreview(prompt)}
+                  {owned === undefined || owned.prompt === '' ? t('noPrompt') : promptPreview(owned.prompt)}
                 </div>
               </div>
               {group.records.map((record) => {

@@ -96,7 +96,12 @@ function parseToolArgs(raw: unknown): Record<string, unknown> | undefined {
   return undefined
 }
 
-function sessionEventOf(node: unknown): { type?: unknown; data?: unknown } | undefined {
+/**
+  * Unwrap one event-window entry (`{type:'event', event}`) or accept a raw
+  * session event. Shared by the card collector and the client's turn/round
+  * reader so both understand exactly one entry shape.
+  */
+export function sessionEventOf(node: unknown): { type?: unknown; data?: unknown } | undefined {
   if (node === null || typeof node !== 'object') return undefined
   const wrapper = node as { type?: unknown; event?: unknown }
   if (wrapper.type === 'event' && wrapper.event !== null && typeof wrapper.event === 'object') {
