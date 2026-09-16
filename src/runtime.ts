@@ -9,6 +9,7 @@ import type { AgentCardHit } from './agent/cards.ts'
 import { claimAgentCards } from './agent/tag.ts'
 import type { LocalHistorySettings, LocalHistorySettingsScope, LocalHistorySettingsUpdate } from './contract.ts'
 import { acceptFile, acceptHunk, rejectFile, rejectHunk, reopenRecord, restoreSnapshot, type ActionIo, type ReopenPayload } from './history/actions.ts'
+import { backfillAgentBefore } from './history/backfill.ts'
 import type { ReviewHunk } from './history/hunks.ts'
 import { HistoryStore } from './history/store.ts'
 import type { HistoryLimits, HistoryRecord } from './types.ts'
@@ -178,6 +179,10 @@ export class LocalHistoryRuntime {
     }
     const store = this.storeFor(sessionId, normalized)
     const settings = this.settings.get()
+    // Repair records written before `write` was understood as a replacement,
+    // so an already-mislabelled history heals instead of showing whole files
+    // as brand new. Idempotent: a clean index costs one load and no write.
+    await backfillAgentBefore(store)
     await claimAgentCards({
       store,
       sessionId,
