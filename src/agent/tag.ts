@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { MAX_SNAPSHOT_BYTES } from '../defaults.ts'
 import type { HistoryKind, HistoryLimits, HistoryRecord } from '../types.ts'
 import type { HistoryStore } from '../history/store.ts'
 import { reconstructBefore } from '../history/hunks.ts'
@@ -160,6 +161,9 @@ export async function claimAgentCards(input: ClaimInput): Promise<HistoryRecord[
         }
 
         const current = await input.readCurrent(hit.path)
+        // Same size rule as the watcher: never store content we would not keep,
+        // so an oversized file cannot bloat the store through the agent path.
+        if (typeof current.content === 'string' && current.content.length > MAX_SNAPSHOT_BYTES) return undefined
         const { beforeHash, kind: fromBefore } = await beforeHashOf(input.store, index.records, hit, current.content)
         let kind: HistoryKind = fromBefore
         let hash: string | null

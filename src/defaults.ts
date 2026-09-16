@@ -11,7 +11,16 @@ export const DEFAULT_IGNORE_DIRS = [
   '.next',
   '.turbo',
   'out',
+  // Runtime output, not source: a single application log reached 61MB and blew
+  // one session store past 230MB, which made every review sync churn.
+  'logs',
 ] as const
+
+/**
+ * Largest file content worth snapshotting. Anything bigger is neither
+ * reviewable nor affordable to keep, so it is not recorded at all.
+ */
+export const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
 
 export const MAX_PER_FILE = 50
 export const MAX_BYTES = 200 * 1024 * 1024

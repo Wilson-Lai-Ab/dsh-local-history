@@ -43,6 +43,8 @@ interface DiffState {
   /** true when the failure is a gc-dropped snapshot blob (ENOENT) */
   gone: boolean
   live: boolean
+  /** true when the snapshot exceeds MAX_SNAPSHOT_BYTES: there is nothing to render. */
+  tooLarge?: boolean
 }
 
 export function DiffView(props: DiffViewProps): ReactNode {
@@ -111,13 +113,29 @@ export function DiffView(props: DiffViewProps): ReactNode {
           live: useLive,
         })
       } catch (loadError) {
+        const failure = String(loadError)
+        // The host refuses oversized blobs outright. Say so plainly rather than
+        // rendering an empty (or invented) diff for content nobody kept.
+        if (!cancelled && failure.includes('blob-too-large')) {
+          setState({
+            before: '',
+            after: '',
+            current: '',
+            binary: false,
+            error: false,
+            tooLarge: true,
+            gone: false,
+            live,
+          })
+          return
+        }
         if (!cancelled) setState({
           before: '',
           after: '',
           current: '',
           binary: false,
           error: true,
-          gone: String(loadError).includes('ENOENT'),
+          gone: failure.includes('ENOENT'),
           live,
         })
       }
@@ -304,7 +322,9 @@ export function DiffView(props: DiffViewProps): ReactNode {
         )}
       </div>
       )}
-      {state.binary ? (
+      {state.tooLarge === true ? (
+        <div className="dsh_lh_empty">{t('tooLargeFile')}</div>
+      ) : state.binary ? (
         <div className="dsh_lh_empty">{t('binaryFile')}</div>
       ) : showPreview ? (
         <PreviewBoundary fallback={t('loadFailed')}>

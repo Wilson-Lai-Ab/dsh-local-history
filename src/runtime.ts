@@ -15,6 +15,7 @@ import { HistoryStore } from './history/store.ts'
 import type { HistoryLimits, HistoryRecord } from './types.ts'
 import { defaultSessionsRoot, historyDir, normalizeCwd, projectKey, sessionDir } from './session-path.ts'
 import { pendingCount } from './pending-latest.ts'
+import { MAX_SNAPSHOT_BYTES } from './defaults.ts'
 import { handleWatchWrite, startWatcher, type WatchHandle } from './watch/watcher.ts'
 
 const MB = 1024 * 1024
@@ -131,7 +132,11 @@ export class LocalHistoryRuntime {
   }
 
   async readBlob(sessionId: string, cwd: string | undefined, hash: string): Promise<{ content: string }> {
-    return { content: await this.storeFor(sessionId, cwd).readBlob(hash) }
+    const store = this.storeFor(sessionId, cwd)
+    // Never hand the browser a blob we would not have stored in the first place:
+    // stores written before the size cap still hold oversized snapshots.
+    if ((await store.blobBytes(hash)) > MAX_SNAPSHOT_BYTES) throw new Error('blob-too-large')
+    return { content: await store.readBlob(hash) }
   }
 
   async readCurrent(_sessionId: string, _cwd: string | undefined, path: string): Promise<{ content: string | null; binary: boolean }> {

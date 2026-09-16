@@ -2,6 +2,7 @@ import { statSync, watch, type FSWatcher } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { shouldSkipDir } from './ignore.ts'
+import { MAX_SNAPSHOT_BYTES } from '../defaults.ts'
 import { sameCardPath, type AgentCardHit } from '../agent/cards.ts'
 import { claimAgentCards } from '../agent/tag.ts'
 import { sha256Hex, type HistoryStore } from '../history/store.ts'
@@ -120,6 +121,12 @@ async function snapshotSave(input: WatchWriteInput): Promise<void> {
   const current = await input.readCurrent(path)
   const hash = current.binary ? BINARY_MARK : current.content === null ? null : sha256Hex(current.content)
   if (seen.has(path) && seen.get(path) === hash) return
+  if (typeof current.content === 'string' && current.content.length > MAX_SNAPSHOT_BYTES) {
+    // Too big to keep and not worth reviewing: remember it so repeated writes of
+    // the same bytes stay no-ops instead of re-reading and re-deciding.
+    seen.set(path, hash)
+    return
+  }
   // Load the index and derive `previousHash` inside the store lock so a
   // concurrent writer can never drop the referenced blob between our load and
   // append (which previously produced dangling beforeHash references).

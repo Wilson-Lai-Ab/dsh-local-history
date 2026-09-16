@@ -76,6 +76,15 @@ export class HistoryStore {
     }
   }
 
+  /** Stored size of a blob in bytes; 0 when it is missing. */
+  async blobBytes(hash: string): Promise<number> {
+    try {
+      return (await stat(blobPath(this.historyRoot, hash))).size
+    } catch {
+      return 0
+    }
+  }
+
   async save(index: HistoryIndex): Promise<void> {
     return withStoreLock(this.historyRoot, () => this.saveUnlocked(index))
   }
