@@ -77,10 +77,9 @@ function turnOf(data: unknown): number | undefined {
 
 /** One user input: the message that opened it, plus its ordinal when known. */
 export interface TurnRound {
-  /**
-   * 1-based user-input ordinal. Absent when the loaded event window does not
-   * reach the session start, so the ordinal cannot be counted honestly.
-   */
+  /** Engine turn that opened this user round; stable even when unnumbered. */
+  sinceTurn: number | undefined
+  /** 1-based user-input ordinal, absent when the window is partial. */
   round?: number
   prompt: string
 }
@@ -108,7 +107,7 @@ export function collectTurnRounds(
   let count = 0
   const open = (turn: number | undefined, prompt: string): void => {
     count += 1
-    rounds.set(turn ?? 'x', numbered ? { round: count, prompt } : { prompt })
+    rounds.set(turn ?? 'x', numbered ? { sinceTurn: turn, round: count, prompt } : { sinceTurn: turn, prompt })
   }
   for (const node of nodes) {
     const event = sessionEventOf(node)

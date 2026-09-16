@@ -226,6 +226,52 @@ describe('ReviewApp', () => {
     root.unmount()
   })
 
+  it('keeps one group per turn when the window is paged and records span several turns', async () => {
+    // C1 regression guard: a paged window yields no ordinals, so grouping must
+    // still key off each round's own turn. Keying off the ordinal merged every
+    // turn into a single group.
+    const records: HistoryRecord[] = [
+      { ...pending, id: 'rec-24', turn: 24, path: '/proj/src/a.ts', hash: 'h24', beforeHash: 'b24' },
+      { ...pending, id: 'rec-25', turn: 25, path: '/proj/src/b.ts', hash: 'h25', beforeHash: 'b25' },
+      { ...pending, id: 'rec-26', turn: 26, path: '/proj/src/c.ts', hash: 'h26', beforeHash: 'b26' },
+    ]
+    const event = (type: string, data: unknown) => ({ type: 'event', event: { type, data } })
+    const sessions = {
+      list: {
+        getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
+      },
+      binding: () => ({
+        eventSource: {
+          getSnapshot: () => ({
+            hasMore: true,
+            entries: [
+              event('turn/start', { turn: 24 }),
+              event('user/message', { content: [{ type: 'text', text: '第二十四问' }], source: { kind: 'user' } }),
+              event('turn/start', { turn: 25 }),
+              event('user/message', { content: [{ type: 'text', text: '第二十五问' }], source: { kind: 'user' } }),
+              event('turn/start', { turn: 26 }),
+              event('user/message', { content: [{ type: 'text', text: '第二十六问' }], source: { kind: 'user' } }),
+            ],
+          }),
+        },
+      }),
+    }
+    const { root, container } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote: fakeRemote({ listReview: async () => ok({ records, pending: 3 }) }),
+      sessions,
+      t: lookup,
+    }))
+    await flush()
+    const groups = [...container.querySelectorAll('.dsh_lh_group')]
+    expect(groups).toHaveLength(3)
+    expect(groups.map((group) => group.querySelector('.dsh_lh_groupTurn')?.textContent))
+      .toEqual([26, 25, 24].map((n) => zh.turn.replace('{n}', String(n))))
+    expect(groups.map((group) => group.querySelector('.dsh_lh_groupPrompt')?.textContent))
+      .toEqual(['第二十六问', '第二十五问', '第二十四问'])
+    root.unmount()
+  })
+
   it('clicking a timeline snapshot opens compare against the previous snapshot', async () => {
     const older: HistoryRecord = {
       ...pending,

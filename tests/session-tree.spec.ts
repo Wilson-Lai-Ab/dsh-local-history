@@ -83,6 +83,6 @@ describe('collectTreeRounds', () => {
         },
       }),
     }, 'sess-1')
-    expect(rounds.get(2)).toEqual({ round: 1, prompt: '改一下 README' })
+    expect(rounds.get(2)).toEqual({ sinceTurn: 2, round: 1, prompt: '改一下 README' })
   })
 })

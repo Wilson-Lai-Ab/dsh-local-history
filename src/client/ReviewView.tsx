@@ -78,8 +78,8 @@ function groupByRound(
   const map = new Map<string, ReviewGroup>()
   for (const record of records) {
     const owned = roundAt(rounds, record.turn)
-    const key = owned !== undefined
-      ? `r${owned.round}`
+    const key = owned !== undefined && owned.sinceTurn !== undefined
+      ? `r${owned.sinceTurn}`
       : record.turn === undefined ? 'x' : `t${record.turn}`
     let group = map.get(key)
     if (group === undefined) {

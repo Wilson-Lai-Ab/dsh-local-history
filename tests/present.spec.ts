@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectTurnRounds, highlightLine, highlightLineHtml, highlightRowsHtml, highlightToHtml, presentReviewHit, promptPreview, roundAt } from '../src/client/present.ts'
+import { collectTurnRounds, highlightLine, highlightLineHtml, highlightRowsHtml, highlightToHtml, presentReviewHit, promptPreview, roundAt, type TurnRound } from '../src/client/present.ts'
 
 describe('presentReviewHit', () => {
   it('splits cwd-relative path into name, leftover folder, and module', () => {
@@ -35,10 +35,10 @@ describe('collectTurnRounds', () => {
       event('turn/start', { turn: 4 }),
       user('第三问'),
     ])
-    expect(rounds.get(1)).toEqual({ round: 1, prompt: '第一问' })
-    expect(rounds.get(2)).toEqual({ round: 2, prompt: '第二问' })
+    expect(rounds.get(1)).toEqual({ sinceTurn: 1, round: 1, prompt: '第一问' })
+    expect(rounds.get(2)).toEqual({ sinceTurn: 2, round: 2, prompt: '第二问' })
     expect(rounds.has(3)).toBe(false)
-    expect(rounds.get(4)).toEqual({ round: 3, prompt: '第三问' })
+    expect(rounds.get(4)).toEqual({ sinceTurn: 4, round: 3, prompt: '第三问' })
   })
 
   it('ignores injected user/message sources', () => {
@@ -57,12 +57,12 @@ describe('collectTurnRounds', () => {
       user('主问题'),
       user('补一句'),
     ])
-    expect(rounds.get(1)).toEqual({ round: 1, prompt: '主问题' })
+    expect(rounds.get(1)).toEqual({ sinceTurn: 1, round: 1, prompt: '主问题' })
   })
 
   it('binds a prompt that arrives before any turn/start to the first turn', () => {
     const rounds = collectTurnRounds([user('先说的话'), event('turn/start', { turn: 1 })])
-    expect(rounds.get(1)).toEqual({ round: 1, prompt: '先说的话' })
+    expect(rounds.get(1)).toEqual({ sinceTurn: 1, round: 1, prompt: '先说的话' })
   })
 
   it('keeps prompts but omits the ordinal when the window is not numbered', () => {
@@ -70,19 +70,35 @@ describe('collectTurnRounds', () => {
       event('turn/start', { turn: 9 }),
       user('很久以后的第九问'),
     ], { numbered: false })
-    expect(rounds.get(9)).toEqual({ prompt: '很久以后的第九问' })
+    expect(rounds.get(9)).toEqual({ sinceTurn: 9, prompt: '很久以后的第九问' })
     expect(rounds.get(9)?.round).toBeUndefined()
+  })
+
+  it('keeps a stable per-turn identity even when ordinals are unavailable', () => {
+    // C1 regression guard: grouping keys off sinceTurn, never off the ordinal,
+    // otherwise every unnumbered turn collapses into one group.
+    const rounds = collectTurnRounds([
+      event('turn/start', { turn: 24 }),
+      user('第二十四问'),
+      event('turn/start', { turn: 25 }),
+      user('第二十五问'),
+      event('turn/start', { turn: 26 }),
+      user('第二十六问'),
+    ], { numbered: false })
+    expect([...rounds.keys()]).toEqual([24, 25, 26])
+    expect(rounds.get(24)?.sinceTurn).toBe(24)
+    expect(rounds.get(26)?.sinceTurn).toBe(26)
   })
 })
 
 describe('roundAt', () => {
   it('merges a turn with no user input into the previous round', () => {
-    const rounds = new Map<number | 'x', { round: number; prompt: string }>([
-      [1, { round: 1, prompt: 'A' }],
-      [4, { round: 2, prompt: 'B' }],
+    const rounds = new Map<number | 'x', TurnRound>([
+      [1, { sinceTurn: 1, round: 1, prompt: 'A' }],
+      [4, { sinceTurn: 4, round: 2, prompt: 'B' }],
     ])
-    expect(roundAt(rounds, 3)).toEqual({ round: 1, prompt: 'A' })
-    expect(roundAt(rounds, 4)).toEqual({ round: 2, prompt: 'B' })
+    expect(roundAt(rounds, 3)).toEqual({ sinceTurn: 1, round: 1, prompt: 'A' })
+    expect(roundAt(rounds, 4)).toEqual({ sinceTurn: 4, round: 2, prompt: 'B' })
     expect(roundAt(rounds, 1)).toEqual(rounds.get(1))
     expect(roundAt(rounds, undefined)).toBeUndefined()
   })
