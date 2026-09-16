@@ -72,7 +72,7 @@ describe('collectSessionEdits', () => {
     ])
   })
 
-  it('yields an add hit from a write tool call paired with a successful event-window result', () => {
+  it('yields a create hit from a write tool call with no prior snapshot', () => {
     const hits = collectSessionEdits([
       {
         type: 'event',
@@ -101,8 +101,63 @@ describe('collectSessionEdits', () => {
       },
     ], '/proj')
     expect(hits).toEqual([
-      { path: '/proj/a.ts', kind: 'add', oldText: null, turn: 1 },
+      { path: '/proj/a.ts', kind: 'add', turn: 1 },
     ])
+  })
+
+  it('reuses the previous snapshot when write overwrites an existing file', async () => {
+    root = await mkdtemp(join(tmpdir(), 'lh-write-'))
+    const store = new HistoryStore(root)
+    const before = await store.putBlob('line1\nline2\nline3\n')
+    await store.append({
+      id: 'prior',
+      path: '/proj/a.ts',
+      hash: before.hash,
+      beforeHash: null,
+      bytes: before.bytes,
+      mtime: 1,
+      source: 'agent',
+      kind: 'add',
+      sessionId: 's',
+    }, limits, 1)
+
+    const hits = collectSessionEdits([
+      {
+        type: 'event',
+        event: {
+          type: 'tool/call',
+          data: {
+            turn: 2,
+            callId: 'c1',
+            name: 'write',
+            arguments: JSON.stringify({ file_path: '/proj/a.ts', content: 'line1\nCHANGED\nline3\n' }),
+          },
+        },
+      },
+      {
+        type: 'event',
+        event: {
+          type: 'tool/result',
+          data: {
+            turn: 2,
+            message: {
+              source: { callId: 'c1' },
+              content: [{ type: 'tool-result', isError: false }],
+            },
+          },
+        },
+      },
+    ], '/proj')
+
+    const claimed = await claimAgentCards({
+      store,
+      sessionId: 's',
+      limits,
+      hits,
+      readCurrent: async () => ({ content: 'line1\nCHANGED\nline3\n', binary: false }),
+    })
+    expect(claimed[0]?.kind).toBe('edit')
+    expect(claimed[0]?.beforeHash).toBe(before.hash)
   })
 
   it('ignores an edit whose event-window result is an error', () => {

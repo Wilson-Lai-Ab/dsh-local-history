@@ -132,7 +132,10 @@ export function hitFromMutationTool(
   const filePath = args.file_path
   if (typeof filePath !== 'string' || filePath === '') return undefined
   const path = resolveProjectPath(cwd, filePath)
-  if (name === 'write') return { path, kind: 'add', oldText: null, turn }
+  // `write` replaces the whole file: whether it is a creation is decided from
+  // the previous snapshot by the caller, so this hit deliberately carries no
+  // `oldText` (undefined ≠ null: null would force "whole file is new").
+  if (name === 'write') return { path, kind: 'add', turn }
   const oldString = args.old_string
   const newString = args.new_string
   if (typeof oldString !== 'string' || typeof newString !== 'string') return undefined
