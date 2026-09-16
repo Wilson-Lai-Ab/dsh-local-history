@@ -107,7 +107,21 @@ export class HistoryStore {
     })
   }
 
-  /** Recycle per spec; returns next index. Never drops pending agent or live hashes. */
+  /**
+    * Recycle per spec; returns next index.
+    *
+    * The byte cap is reclaimed from SAVE records first, biggest first: that is
+    * where bulk actually lives (one runtime log outweighed a whole session of
+    * edits). The old version could only shed RESOLVED agent records, so a store
+    * pinned over the cap by a log kept deleting the user's review history — and
+    * the next sync rebuilt it, which is what made every review sync churn.
+    *
+    * PENDING agent records are never dropped: they are review items the user has
+    * not answered yet.
+    *
+    * Live bytes are computed once per call; the old loop recomputed them (stat-ing
+    * blobs) on every iteration.
+    */
   gc(index: HistoryIndex, limits: HistoryLimits, now: number = Date.now()): HistoryIndex {
     const drop = new Set<string>()
     const cutoff = now - limits.retentionDays * DAY_MS
@@ -129,19 +143,44 @@ export class HistoryStore {
           extra -= 1
         }
       }
+      // Still over: shed the oldest DECIDED agent rows. An agent row without a
+      // decision is pending (the user has not answered it) and is kept.
+      for (const record of oldestFirst) {
+        if (extra <= 0) break
+        if (drop.has(record.id)) continue
+        if (record.source === 'agent' && isDecided(record)) {
+          drop.add(record.id)
+          extra -= 1
+        }
+      }
     }
 
-    while (true) {
-      const list = remaining()
-      const overCount = [...groupedByPath(list).values()].some((group) => group.length > limits.maxPerFile)
-      const overBytes = uniqueLiveBytes(list, this.historyRoot) > limits.maxBytes
-      if (!overCount && !overBytes) break
-      const victim = list
-        .filter((record) => record.source === 'agent' && (record.decision === 'accepted' || record.decision === 'rejected'))
-        .slice()
-        .sort(byMtimeThenId)[0]
-      if (victim === undefined) break
-      drop.add(victim.id)
+    let liveBytes = uniqueLiveBytes(remaining(), this.historyRoot)
+
+    // Fewest deletions first: drop the largest saves until the cap is met.
+    if (liveBytes > limits.maxBytes) {
+      const saves = remaining()
+        .filter((record) => record.source === 'save')
+        .sort((a, b) => b.bytes - a.bytes || byMtimeThenId(a, b))
+      for (const record of saves) {
+        if (liveBytes <= limits.maxBytes) break
+        drop.add(record.id)
+        liveBytes -= record.bytes
+      }
+    }
+
+    // Still over: only the agent's own content is left. Shed the oldest RESOLVED
+    // ones. When nothing droppable remains we stop and report honestly instead
+    // of thrashing records between syncs.
+    if (liveBytes > limits.maxBytes) {
+      const resolved = remaining()
+        .filter((record) => record.source === 'agent' && isDecided(record))
+        .sort(byMtimeThenId)
+      for (const record of resolved) {
+        if (liveBytes <= limits.maxBytes) break
+        drop.add(record.id)
+        liveBytes -= record.bytes
+      }
     }
 
     return { version: 1, records: remaining() }
@@ -172,6 +211,11 @@ export class HistoryStore {
 
 function byMtimeThenId(a: HistoryRecord, b: HistoryRecord): number {
   return a.mtime - b.mtime || a.id.localeCompare(b.id)
+}
+
+/** An agent row the user has already answered; undecided rows are pending work. */
+function isDecided(record: HistoryRecord): boolean {
+  return record.decision === 'accepted' || record.decision === 'rejected'
 }
 
 function groupedByPath(records: HistoryRecord[]): Map<string, HistoryRecord[]> {
