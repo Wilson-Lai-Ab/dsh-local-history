@@ -1,5 +1,5 @@
 import type { HistoryLimits, HistoryRecord } from '../types.ts';
-import type { HistoryStore } from '../history/store.ts';
+import { type HistoryStore } from '../history/store.ts';
 import { type AgentCardHit } from './cards.ts';
 export { collectSessionEdits, diffsOf, oldTextOf, resolveProjectPath, reviewLocations, sameCardPath, } from './cards.ts';
 export type { AgentCardHit, AgentEditKind, FileDiffHunk } from './cards.ts';

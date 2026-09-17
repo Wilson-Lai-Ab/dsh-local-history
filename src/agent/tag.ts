@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { MAX_SNAPSHOT_BYTES } from '../defaults.ts'
 import type { HistoryKind, HistoryLimits, HistoryRecord } from '../types.ts'
-import type { HistoryStore } from '../history/store.ts'
+import { sha256Hex, type HistoryStore } from '../history/store.ts'
+import { newestDifferentPrior } from '../history/prior.ts'
 import { reconstructBefore } from '../history/hunks.ts'
 import {
   collectSessionEdits,
@@ -44,17 +45,6 @@ function claimedBy(record: HistoryRecord, sessionId: string, path: string, turn:
   return sameTurn(record.turn, turn)
 }
 
-function latestHashForPath(records: readonly HistoryRecord[], path: string): string | null {
-  let latest: HistoryRecord | undefined
-  for (const record of records) {
-    if (!sameCardPath(record.path, path)) continue
-    if (latest === undefined || record.mtime > latest.mtime || (record.mtime === latest.mtime && record.id > latest.id)) {
-      latest = record
-    }
-  }
-  return latest?.hash ?? null
-}
-
 async function beforeHashOf(
   store: HistoryStore,
   records: readonly HistoryRecord[],
@@ -70,7 +60,12 @@ async function beforeHashOf(
       return { beforeHash: blob.hash, kind }
     }
   }
-  const previous = latestHashForPath(records, hit.path)
+  // The newest record for a path is often the watcher's own save of the very
+  // bytes the agent just wrote: comparing against it yields an empty diff, so
+  // resolve the newest version whose content actually DIFFERS. Null means this
+  // change created the file.
+  const currentHash = typeof current === 'string' ? sha256Hex(current) : null
+  const previous = await newestDifferentPrior(store, records, hit.path, currentHash)
   if (typeof hit.oldText === 'string') {
     if (looksLikeHunkSnippet(hit.oldText, current) && previous !== null && (await store.hasBlob(previous))) {
       return { beforeHash: previous, kind: kind === 'add' ? 'edit' : kind }
