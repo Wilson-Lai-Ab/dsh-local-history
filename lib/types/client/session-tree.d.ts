@@ -19,12 +19,19 @@ export interface SessionBinding {
      * The live session event window. This is the ONLY conversation source: the
      * Session snapshot itself (`SessionSnapshot`) has no node list at all, so a
      * `nodes` probe would always read empty.
+     *
+     * The window opens with only ~50 messages (`events.open({ maxMessages: 50 })`),
+     * so a long session is paged: `hasMore` is normally true.
      */
     eventSource?: {
         getSnapshot?: () => {
             entries?: readonly unknown[];
             hasMore?: boolean;
         };
+    };
+    /** Opens ONE older page of the window (the Session face's own API). */
+    session?: {
+        loadOlder?: () => Promise<void>;
     };
 }
 export interface SessionsFace {
@@ -40,3 +47,18 @@ export declare function treeSessionIds(byId: Record<string, SessionSummary | und
 export declare function collectTreeHits(sessions: SessionsFace | undefined, sessionId: string, cwd: string | undefined): AgentCardHit[];
 /** Engine turn → user input for the current session tree (root + subagents). */
 export declare function collectTreeRounds(sessions: SessionsFace | undefined, sessionId: string): Map<number | 'x', TurnRound>;
+/** True when any session in the tree still holds older events off-window. */
+export declare function treeWindowHasMore(sessions: SessionsFace | undefined, sessionId: string): boolean;
+/**
+ * Page the window back so an older change can be matched to the user input that
+ * caused it.
+ *
+ * Changes made before the loaded window have no user message in view, which
+ * would render them as an engine turn with 「(无用户消息)」. Loading older pages
+ * is how the session itself exposes that history.
+ *
+ * @param maxPages - pages this caller is still willing to pull, so a huge
+ *   session is never loaded wholesale by the review pane.
+ * @returns how many pages were actually loaded.
+ */
+export declare function loadOlderPages(sessions: SessionsFace | undefined, sessionId: string, maxPages: number): Promise<number>;

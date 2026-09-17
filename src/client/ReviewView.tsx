@@ -15,7 +15,7 @@ import { applyReviewRevert, popReviewRedo, popReviewUndo, pushReviewRevert } fro
 import { bindReviewKeys } from './review-keys.ts'
 import { latestPendingPerPath } from '../pending-latest.ts'
 import { presentReviewHit, promptPreview, roundAt, type TurnRound } from './present.ts'
-import { collectTreeHits, collectTreeRounds, type SessionsFace } from './session-tree.ts'
+import { collectTreeHits, collectTreeRounds, loadOlderPages, treeWindowHasMore, type SessionsFace } from './session-tree.ts'
 
 export interface SessionScope {
   sessionId: string
@@ -54,6 +54,17 @@ function matchesFilter(record: HistoryRecord, filter: Filter): boolean {
   if (filter === 'pending') return decision === 'pending'
   if (filter === 'done') return decision !== 'pending'
   return true
+}
+
+/** Older window pages the review pane may pull before it stops asking. */
+const OLDER_PAGE_BUDGET = 12
+
+/** A change whose turn has no user input anywhere in the loaded window. */
+function recordTurnUnmapped(
+  record: HistoryRecord,
+  rounds: ReadonlyMap<number | 'x', TurnRound>,
+): boolean {
+  return record.turn !== undefined && roundAt(rounds, record.turn) === undefined
 }
 
 interface ReviewGroup {
@@ -117,6 +128,9 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
   const syncing = useRef(false)
+  const [windowRevision, setWindowRevision] = useState(0)
+  /** Older pages this pane may still pull, so a long session stays cheap. */
+  const olderPagesRef = useRef(0)
 
   const cwd = scope.cwd
   const pending = useMemo(() => latestPendingPerPath(records), [records])
@@ -182,12 +196,32 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
   }, [filter, pending, records])
   const rounds = useMemo(
     () => collectTreeRounds(sessions, scope.sessionId),
-    [sessions, scope.sessionId, records],
+    [sessions, scope.sessionId, records, windowRevision],
   )
   const groups = useMemo(
     () => groupByRound(filtered, rounds),
     [filtered, rounds],
   )
+
+  // A change made before the loaded window has no user message in view, which
+  // would label it by engine turn and print 「(无用户消息)」. Page the window back
+  // until every listed change has its round — bounded, so a long session is
+  // never pulled in wholesale.
+  useEffect(() => {
+    if (props.visible === false) return
+    if (filtered.length === 0) return
+    if (!filtered.some((record) => recordTurnUnmapped(record, rounds))) return
+    if (!treeWindowHasMore(sessions, scope.sessionId)) return
+    const budget = OLDER_PAGE_BUDGET - olderPagesRef.current
+    if (budget <= 0) return
+    let cancelled = false
+    void (async () => {
+      const loaded = await loadOlderPages(sessions, scope.sessionId, budget)
+      olderPagesRef.current += loaded
+      if (!cancelled && loaded > 0) setWindowRevision((value) => value + 1)
+    })()
+    return () => { cancelled = true }
+  }, [filtered, rounds, sessions, scope.sessionId, props.visible])
 
   const revert = (direction: 'undo' | 'redo'): boolean => {
     const entry = direction === 'undo' ? popReviewUndo() : popReviewRedo()

@@ -130,6 +130,54 @@ describe('ReviewApp', () => {
     root.unmount()
   })
 
+  it('pages the window back so an older change still shows its user message', async () => {
+    // The real window opens with ~50 messages, so an older change starts out
+    // unmatched: engine-turn label and 「(无用户消息)」 until history is loaded.
+    const record: HistoryRecord = { ...pending, id: 'r-old', turn: 3, path: '/proj/src/old.ts' }
+    const event = (type: string, data: unknown) => ({ type: 'event', event: { type, data } })
+    const user = (text: string) => event('user/message', {
+      content: [{ type: 'text', text }],
+      source: { kind: 'user' },
+    })
+    let window: { entries: unknown[]; hasMore: boolean } = {
+      entries: [event('turn/start', { turn: 5 }), user('第三问')],
+      hasMore: true,
+    }
+    const sessions = {
+      list: {
+        getSnapshot: () => ({ current: 'sess-1', byId: { 'sess-1': { id: 'sess-1', cwd: '/proj' } } }),
+      },
+      binding: () => ({
+        eventSource: { getSnapshot: () => window },
+        session: {
+          loadOlder: async () => {
+            window = {
+              entries: [
+                event('turn/start', { turn: 1 }), user('第一问'),
+                event('turn/start', { turn: 3 }), user('第二问'),
+                event('turn/start', { turn: 5 }), user('第三问'),
+              ],
+              hasMore: false,
+            }
+          },
+        },
+      }),
+    }
+    const { root, container } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote: fakeRemote({ listReview: async () => ok({ records: [record], pending: 1 }) }),
+      sessions,
+      t: lookup,
+    }))
+    await flush()
+    await flush()
+    // The older page has been pulled: the change now shows its user input.
+    expect(container.querySelector('.dsh_lh_groupTurn')?.textContent).toBe(zh.turn.replace('{n}', '2'))
+    expect(container.querySelector('.dsh_lh_groupPrompt')?.textContent).toBe('第二问')
+    expect(container.textContent).not.toContain(zh.noPrompt)
+    root.unmount()
+  })
+
   it('puts the most recent change first, both across rounds and inside one', async () => {
     // listReview hands records over in index order (oldest first), like the host.
     const oldest: HistoryRecord = { ...pending, id: 'r-oldest', turn: 1, mtime: 1_000, path: '/proj/src/one.ts' }
