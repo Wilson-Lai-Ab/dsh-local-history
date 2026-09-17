@@ -66,14 +66,25 @@ interface ReviewGroup {
   records: HistoryRecord[]
 }
 
+/** Most recently changed file first; the host hands records over oldest-first. */
+function byNewestChange(a: HistoryRecord, b: HistoryRecord): number {
+  if (a.mtime !== b.mtime) return b.mtime - a.mtime
+  const aTurn = a.turn ?? -1
+  const bTurn = b.turn ?? -1
+  if (aTurn !== bTurn) return bTurn - aTurn
+  return b.id.localeCompare(a.id)
+}
+
 /**
   * Group by USER INPUT, not by engine turn: a turn with no user message of its
   * own (an automatic continuation) belongs to the round that opened it.
+  *
+  * Newest first throughout — the newest round on top and the newest change
+  * inside it on top — matching how sessions are listed.
   */
 function groupByRound(
   records: readonly HistoryRecord[],
   rounds: ReadonlyMap<number | 'x', TurnRound>,
-  newestFirst: boolean,
 ): ReviewGroup[] {
   const map = new Map<string, ReviewGroup>()
   for (const record of records) {
@@ -91,13 +102,9 @@ function groupByRound(
     if (record.mtime > (group.time ?? 0)) group.time = record.mtime
   }
   const groups = [...map.values()]
+  for (const group of groups) group.records.sort(byNewestChange)
   const rank = (group: ReviewGroup): number => group.round ?? group.turn ?? -1
-  groups.sort((a, b) => {
-    if (rank(a) !== rank(b)) return newestFirst ? rank(b) - rank(a) : rank(a) - rank(b)
-    const aTime = a.time ?? 0
-    const bTime = b.time ?? 0
-    return newestFirst ? bTime - aTime : aTime - bTime
-  })
+  groups.sort((a, b) => (rank(b) - rank(a)) || ((b.time ?? 0) - (a.time ?? 0)))
   return groups
 }
 
@@ -178,8 +185,8 @@ export function ReviewApp(props: ReviewAppProps): ReactNode {
     [sessions, scope.sessionId, records],
   )
   const groups = useMemo(
-    () => groupByRound(filtered, rounds, filter !== 'done'),
-    [filter, filtered, rounds],
+    () => groupByRound(filtered, rounds),
+    [filtered, rounds],
   )
 
   const revert = (direction: 'undo' | 'redo'): boolean => {

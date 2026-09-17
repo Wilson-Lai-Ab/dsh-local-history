@@ -130,6 +130,26 @@ describe('ReviewApp', () => {
     root.unmount()
   })
 
+  it('puts the most recent change first, both across rounds and inside one', async () => {
+    // listReview hands records over in index order (oldest first), like the host.
+    const oldest: HistoryRecord = { ...pending, id: 'r-oldest', turn: 1, mtime: 1_000, path: '/proj/src/one.ts' }
+    const earlierInRound: HistoryRecord = { ...pending, id: 'r-earlier', turn: 2, mtime: 3_000, path: '/proj/src/two-old.ts' }
+    const latest: HistoryRecord = { ...pending, id: 'r-latest', turn: 2, mtime: 4_000, path: '/proj/src/two-new.ts' }
+    const { root, container } = mount(createElement(ReviewApp, {
+      scope: { sessionId: 'sess-1', cwd: '/proj' },
+      remote: fakeRemote({
+        listReview: async () => ok({ records: [oldest, earlierInRound, latest], pending: 3 }),
+      }),
+      t: lookup,
+    }))
+    await flush()
+    expect([...container.querySelectorAll('.dsh_lh_groupTurn')].map((el) => el.textContent))
+      .toEqual([zh.turn.replace('{n}', '2'), zh.turn.replace('{n}', '1')])
+    expect([...container.querySelectorAll('.dsh_lh_name')].map((el) => el.textContent))
+      .toEqual(['two-new.ts', 'two-old.ts', 'one.ts'])
+    root.unmount()
+  })
+
   it('pending hides an earlier turn of the same file', async () => {
     const first: HistoryRecord = { ...pending, id: 'rec-t1', turn: 1, mtime: 1 }
     const second: HistoryRecord = { ...pending, id: 'rec-t2', turn: 2, mtime: 2 }
